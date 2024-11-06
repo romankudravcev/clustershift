@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"clustershift/internal/cluster"
 	"fmt"
 
 	"k8s.io/client-go/dynamic"
@@ -14,12 +15,12 @@ var clusters *Clusters
 
 // InitClients initializes both Kubernetes clients from the given kubeconfig paths.
 func InitClients(originKubeconfigPath, targetKubeconfigPath string) (Clusters, error) {
-	originCluster, err := newCluster(originKubeconfigPath)
+	originCluster, err := newCluster(originKubeconfigPath, "context-origin")
 	if err != nil {
 		return Clusters{}, fmt.Errorf("failed to initialize origin cluster: %w", err)
 	}
 
-	targetCluster, err := newCluster(targetKubeconfigPath)
+	targetCluster, err := newCluster(targetKubeconfigPath, "context-target")
 	if err != nil {
 		return Clusters{}, fmt.Errorf("failed to initialize target cluster: %w", err)
 	}
@@ -33,7 +34,7 @@ func InitClients(originKubeconfigPath, targetKubeconfigPath string) (Clusters, e
 	return *clusters, nil
 }
 
-func newCluster(kubeconfigPath string) (*Cluster, error) {
+func newCluster(kubeconfigPath string, context string) (*Cluster, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build config: %w", err)
@@ -54,10 +55,16 @@ func newCluster(kubeconfigPath string) (*Cluster, error) {
 		return nil, fmt.Errorf("failed to initialize dynamic clientset: %w", err)
 	}
 
+	clusterOptions := cluster.ClusterOptions{
+		KubeconfigPath: kubeconfigPath,
+		Context:        context,
+	}
+
 	return &Cluster{
 		Clientset:        clientset,
 		TraefikClientset: traefikClientset,
 		DynamicClientset: dynamicClientset,
+		ClusterOptions:   &clusterOptions,
 	}, nil
 }
 
