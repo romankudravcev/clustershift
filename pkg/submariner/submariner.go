@@ -1,52 +1,65 @@
 package submariner
 
 import (
-	"clustershift/internal/cluster"
 	"clustershift/internal/constants"
-	"clustershift/internal/helm"
+	"clustershift/internal/kube"
+	"encoding/base64"
+
+	v1 "k8s.io/api/core/v1"
 )
 
-func DeployBroker(c cluster.ClusterOptions) {
-	helmOptions := helm.HelmClientOptions{
-		KubeConfigPath: c.KubeconfigPath,
-		Context:        c.Context,
-		Namespace:      constants.SubmarinerBrokerNamespace,
-		Debug:          constants.Debug,
+func InstallSubmariner(c kube.Clusters) {
+	// Gather necessary information
+	cidrs := BuildCIDRs(c)
+
+	// Label one master node in each cluster as a gateway node
+	LabelGatewayNode(c.Origin)
+	LabelGatewayNode(c.Target)
+
+	// Deploy broker
+	DeployBroker(*c.Origin.ClusterOptions)
+
+	psk := GenerateRandomString(64)
+	secretInterface, err := c.Origin.FetchResource(kube.Secret, constants.SubmarinerBrokerClientToken, constants.SubmarinerBrokerNamespace)
+	if err != nil {
+		panic(err)
+	}
+	secret := secretInterface.(*v1.Secret)
+	token := DecodeBase64String(base64.StdEncoding.EncodeToString(secret.Data["token"]))
+	ca := base64.StdEncoding.EncodeToString(secret.Data["ca.crt"])
+
+	originJoinOptions := SubmarinerJoinOptions{
+		Psk:         psk,
+		BrokerURL:   cidrs.brokerURL,
+		Token:       token,
+		CA:          ca,
+		ClusterId:   "origin",
+		PodCIDR:     cidrs.podCIDROrigin,
+		ServiceCIDR: cidrs.serviceCIDROrigin,
+		GlobalCIDR:  "242.0.0.0/16",
 	}
 
-	helmClient := helm.GetHelmClient(helmOptions)
-
-	chartOptions := helm.ChartOptions{
-		RepoName:    constants.SubmarinerRepoName,
-		RepoURL:     constants.SubmarinerRepoURL,
-		ReleaseName: constants.SubmarinerBrokerNamespace,
-		ChartName:   constants.SubmarinerBrokerChartName,
-		Wait:        true,
+	targetJoinOptions := SubmarinerJoinOptions{
+		Psk:         psk,
+		BrokerURL:   cidrs.brokerURL,
+		Token:       token,
+		CA:          ca,
+		ClusterId:   "target",
+		PodCIDR:     cidrs.podCIDRTarget,
+		ServiceCIDR: cidrs.serviceCIDRTarget,
+		GlobalCIDR:  "242.1.0.0/16",
 	}
 
-	helm.HelmAddandInstallChart(helmClient, chartOptions)
+	// Deploy operator
+	JoinCluster(*c.Origin.ClusterOptions, originJoinOptions)
+	JoinCluster(*c.Target.ClusterOptions, targetJoinOptions)
 }
 
-func JoinCluster(c cluster.ClusterOptions, args string) {
-	helmOptions := helm.HelmClientOptions{
-		KubeConfigPath: c.KubeconfigPath,
-		Context:        c.Context,
-		Namespace:      constants.SubmarinerOperatorNamespace,
-		Debug:          constants.Debug,
+func LabelGatewayNode(c kube.Cluster) {
+	node := c.FetchMasterNode()
+	labels := map[string]string{
+		"submariner.io/gateway": "true",
 	}
 
-	helmClient := helm.GetHelmClient(helmOptions)
-	//TODO - Generate values
-	values := ""
-
-	chartOptions := helm.ChartOptions{
-		RepoName:    constants.SubmarinerRepoName,
-		RepoURL:     constants.SubmarinerRepoURL,
-		ReleaseName: constants.SubmarinerBrokerNamespace,
-		ChartName:   constants.SubmarinerBrokerChartName,
-		Values:      values,
-		Wait:        true,
-	}
-
-	helm.HelmAddandInstallChart(helmClient, chartOptions)
+	c.AddNodeLabels(&node.Items[0], labels)
 }
