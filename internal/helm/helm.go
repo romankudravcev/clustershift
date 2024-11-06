@@ -12,16 +12,16 @@ import (
 
 func GetHelmClient(h HelmClientOptions) helmclient.Client {
 	// Read kubeconfig file
-	kubeConfig, err := os.ReadFile(h.kubeConfigPath)
+	kubeConfig, err := os.ReadFile(h.KubeConfigPath)
 
 	opt := &helmclient.KubeConfClientOptions{
 		Options: &helmclient.Options{
-			Namespace:        h.namespace,
+			Namespace:        h.Namespace,
 			RepositoryCache:  "/tmp/.helmcache",
 			RepositoryConfig: "/tmp/.helmrepo",
-			Debug:            h.debug,
+			Debug:            h.Debug,
 		},
-		KubeContext: h.context,
+		KubeContext: h.Context,
 		KubeConfig:  []byte(kubeConfig),
 	}
 
@@ -35,10 +35,10 @@ func GetHelmClient(h HelmClientOptions) helmclient.Client {
 	return helmClient
 }
 
-func helmAddandInstallChart(h helmclient.Client, c ChartOptions) {
+func HelmAddandInstallChart(h helmclient.Client, c ChartOptions) {
 	chartRepo := repo.Entry{
-		Name: c.repoName,
-		URL:  c.repoURL,
+		Name: c.RepoName,
+		URL:  c.RepoURL,
 	}
 
 	// Add the chart repository
@@ -48,11 +48,12 @@ func helmAddandInstallChart(h helmclient.Client, c ChartOptions) {
 
 	// Define the chart to be installed
 	chartSpec := helmclient.ChartSpec{
-		ReleaseName:     c.releaseName,
-		ChartName:       c.chartName,
-		Wait:            c.wait,
+		ReleaseName:     c.ReleaseName,
+		ChartName:       c.ChartName,
+		Wait:            c.Wait,
 		UpgradeCRDs:     true,
 		CreateNamespace: true,
+		ValuesYaml:      c.Values,
 	}
 
 	// Install the chart

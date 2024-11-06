@@ -1,16 +1,17 @@
 package helm
 
 type HelmClientOptions struct {
-	kubeConfigPath string
-	context        string
-	namespace      string
-	debug          bool
+	KubeConfigPath string
+	Context        string
+	Namespace      string
+	Debug          bool
 }
 
 type ChartOptions struct {
-	repoName    string
-	repoURL     string
-	releaseName string
-	chartName   string
-	wait        bool
+	RepoName    string
+	RepoURL     string
+	ReleaseName string
+	ChartName   string
+	Values      string
+	Wait        bool
 }
