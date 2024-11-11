@@ -10,15 +10,17 @@ import (
 func (c *Clusters) CreateResourceDiff(resourceType ResourceType) {
 	diffResources, err := c.getResourceDiff(resourceType)
 	if err != nil {
-		fmt.Printf("Error getting %s diff: %v\n", resourceType, err)
+		//fmt.Printf("Error getting %s diff: %v\n", resourceType, err)
 		return
 	}
 
-	fmt.Printf("%ss in original but not in target:\n", resourceType)
-	for _, resource := range diffResources.([]interface{}) {
-		meta := reflect.ValueOf(resource).FieldByName("ObjectMeta").Interface().(metav1.ObjectMeta)
-		fmt.Printf("Namespace: %s, Name: %s\n", meta.Namespace, meta.Name)
-	}
+	//fmt.Printf("%ss in original but not in target:\n", resourceType)
+	/*
+		for _, resource := range diffResources.([]interface{}) {
+			meta := reflect.ValueOf(resource).FieldByName("ObjectMeta").Interface().(metav1.ObjectMeta)
+			//fmt.Printf("Namespace: %s, Name: %s\n", meta.Namespace, meta.Name)
+		}
+	*/
 
 	for _, resource := range diffResources.([]interface{}) {
 		newResource := cleanResourceForCreation(resource)
@@ -30,10 +32,10 @@ func (c *Clusters) CreateResourceDiff(resourceType ResourceType) {
 		createErr = c.Target.CreateResource(resourceType, name, namespace, newResource)
 
 		if createErr != nil {
-			fmt.Printf("Error creating %s %s in namespace %s: %v\n", resourceType, name, namespace, createErr)
+			//fmt.Printf("Error creating %s %s in namespace %s: %v\n", resourceType, name, namespace, createErr)
 			continue
 		}
-		fmt.Printf("Successfully created %s %s in namespace %s\n", resourceType, name, namespace)
+		//fmt.Printf("Successfully created %s %s in namespace %s\n", resourceType, name, namespace)
 	}
 }
 
