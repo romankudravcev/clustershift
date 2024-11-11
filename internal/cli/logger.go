@@ -15,6 +15,7 @@ type Logger struct {
 	mu         sync.Mutex
 	timeFormat string
 	closed     bool
+	parent     *Logger // Add parent reference to Logger
 }
 
 type LoggerConfig struct {
@@ -37,25 +38,32 @@ func (l *Logger) handleError(message string, err error) {
 }
 
 func NewLogger(message string, parent *Logger) *Logger {
-	config := &DefaultConfig
+	fmt.Print("\n")
 
 	logger := &Logger{
-		timeFormat: config.TimeFormat,
+		timeFormat: DefaultConfig.TimeFormat,
+		parent:     parent,
 	}
 
-	if err := os.MkdirAll(config.LogDir, 0755); err != nil {
-		logger.handleError("Failed to create log directory", err)
-		return logger
-	}
+	if parent == nil {
+		// Only create new file for root logger
+		if err := os.MkdirAll(DefaultConfig.LogDir, 0755); err != nil {
+			logger.handleError("Failed to create log directory", err)
+			return logger
+		}
 
-	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	logPath := filepath.Join(config.LogDir, fmt.Sprintf("%s.log", timestamp))
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		logger.handleError("Failed to create log file", err)
-		return logger
+		timestamp := time.Now().Format("2006-01-02_15-04-05")
+		logPath := filepath.Join(DefaultConfig.LogDir, fmt.Sprintf("%s.log", timestamp))
+		file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		if err != nil {
+			logger.handleError("Failed to create log file", err)
+			return logger
+		}
+		logger.file = file
+	} else {
+		// Child loggers use parent's file
+		logger.file = parent.file
 	}
-	logger.file = file
 
 	var parentStatus *Status
 	if parent != nil {
@@ -113,18 +121,19 @@ func (l *Logger) writeToFile(message string) {
 	}
 }
 
-// private close method
 func (l *Logger) close() {
-	if !l.closed && l.file != nil {
-		if err := l.file.Close(); err != nil {
-			l.handleError("Close error", err)
-		}
-		l.file = nil
+	if !l.closed {
 		l.closed = true
+		// Only close the file if this is the root logger
+		if l.parent == nil && l.file != nil {
+			if err := l.file.Close(); err != nil {
+				l.handleError("Close error", err)
+			}
+			l.file = nil
+		}
 	}
 }
 
-// Close remains public for deferred calls that don't end in Success/Fail
 func (l *Logger) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
