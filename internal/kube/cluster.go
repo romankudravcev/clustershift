@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 
 	v1 "k8s.io/api/core/v1"
@@ -21,7 +20,7 @@ func (c Cluster) FetchMasterNode() *v1.NodeList {
 	}
 
 	if len(nodes.Items) == 0 {
-		log.Fatal("No master node found")
+		//log.Fatal("No master node found")
 	}
 
 	return nodes
