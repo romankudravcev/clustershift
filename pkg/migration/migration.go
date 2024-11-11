@@ -1,6 +1,7 @@
 package migration
 
 import (
+	"clustershift/internal/cli"
 	"clustershift/internal/kube"
 	"clustershift/internal/kubeconfig"
 	"clustershift/pkg/submariner"
@@ -8,6 +9,11 @@ import (
 )
 
 func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
+	logger := cli.NewLogger("Migrating cluster", nil)
+	defer logger.Success("Cluster migration complete")
+
+	//TODO extract code
+	l := logger.Log("Initializing kubernetes clients")
 	// Copy the kubeconfig files to a temporary directory and modify them
 	kubeconfig.ProcessKubeconfig(kubeconfigOrigin, "origin")
 	kubeconfig.ProcessKubeconfig(kubeconfigTarget, "target")
@@ -21,10 +27,12 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 		fmt.Println(err)
 		return
 	}
+	l.Success("Initialized kubernetes clients")
 
 	// Create secure connection between clusters via submariner
-	submariner.InstallSubmariner(clusters)
+	submariner.InstallSubmariner(clusters, logger)
 
+	l.Log("Migrating resources")
 	clusters.CreateResourceDiff(kube.Namespace)
 	clusters.CreateResourceDiff(kube.ConfigMap)
 	clusters.CreateResourceDiff(kube.Secret)
@@ -36,6 +44,5 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 	clusters.CreateResourceDiff(kube.IngressRouteUDP)
 	clusters.CreateResourceDiff(kube.Middleware)
 	clusters.CreateResourceDiff(kube.TraefikService)
-
-	fmt.Println("Successfully migrated resources")
+	l.Success("Resources migrated")
 }
