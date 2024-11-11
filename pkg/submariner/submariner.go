@@ -1,6 +1,7 @@
 package submariner
 
 import (
+	"clustershift/internal/cli"
 	"clustershift/internal/constants"
 	"clustershift/internal/kube"
 	"encoding/base64"
@@ -8,16 +9,23 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-func InstallSubmariner(c kube.Clusters) {
+func InstallSubmariner(c kube.Clusters, logger *cli.Logger) {
+	log := logger.Log("Installing Submariner")
+	defer log.Success("Submariner installed")
+
 	// Gather necessary information
 	cidrs := BuildCIDRs(c)
 
+	l := log.Log("Labeling gateway nodes")
 	// Label one master node in each cluster as a gateway node
 	LabelGatewayNode(c.Origin)
 	LabelGatewayNode(c.Target)
+	l.Success("Labeled gateway nodes")
 
 	// Deploy broker
+	l = log.Log("Deploying broker")
 	DeployBroker(*c.Origin.ClusterOptions)
+	l.Success("Deployed broker")
 
 	psk := GenerateRandomString(64)
 	secretInterface, err := c.Origin.FetchResource(kube.Secret, constants.SubmarinerBrokerClientToken, constants.SubmarinerBrokerNamespace)
@@ -51,8 +59,12 @@ func InstallSubmariner(c kube.Clusters) {
 	}
 
 	// Deploy operator
+	l = log.Log("Joining origin cluster")
 	JoinCluster(*c.Origin.ClusterOptions, originJoinOptions)
+	l.Success("Joined origin cluster")
+	l = log.Log("Joining target cluster")
 	JoinCluster(*c.Target.ClusterOptions, targetJoinOptions)
+	l.Success("Joined target cluster")
 }
 
 func LabelGatewayNode(c kube.Cluster) {
