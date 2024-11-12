@@ -91,15 +91,55 @@ func (l *Logger) Success(message string) {
 	}
 }
 
-func (l *Logger) Fail(message string) {
+func (l *Logger) Warning(message string, err error) error {
+	if err == nil {
+		return nil
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
-
+	if err.Error() == "" {
+		message = fmt.Sprintf("%s", message)
+	} else {
+		message = fmt.Sprintf("%s: %v", message, err)
+	}
 	if l.status != nil && !l.closed {
 		l.status.Fail(message)
 		l.writeToFile(fmt.Sprintf("Failed: %s", message))
 		l.close() // Automatically close after failure
 	}
+
+	return fmt.Errorf(message)
+}
+func (l *Logger) Fail(message string, err error) error {
+	if err == nil {
+		return nil
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if err.Error() == "" {
+		message = fmt.Sprintf("%s", message)
+	} else {
+		message = fmt.Sprintf("%s: %v", message, err)
+	}
+	if l.status != nil && !l.closed {
+		l.status.Fail(message)
+		l.writeToFile(fmt.Sprintf("Failed: %s", message))
+		l.close() // Automatically close after failure
+	}
+
+	for {
+		if l.parent == nil {
+			break
+		}
+		l = l.parent
+		l.Fail(l.status.message, fmt.Errorf(""))
+		l.writeToFile(fmt.Sprintf("Failed: %s", message))
+		l.close() // Automatically close after failure
+	}
+
+	return fmt.Errorf(message)
 }
 
 func (l *Logger) writeToFile(message string) {
