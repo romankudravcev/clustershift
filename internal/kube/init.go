@@ -30,7 +30,7 @@ func InitClients(originKubeconfigPath, targetKubeconfigPath string) (Clusters, e
 		Target: *targetCluster,
 	}
 
-	fmt.Println("Successfully initialized Kubernetes clients")
+	//fmt.Println("Successfully initialized Kubernetes clients")
 	return *clusters, nil
 }
 
