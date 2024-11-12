@@ -14,7 +14,7 @@ var (
 		Use:   "diagnose",
 		Short: "diagnose connectivity between two clusters",
 		Run: func(cmd *cobra.Command, args []string) {
-			connectivity.RunClusterConnectivityProbe(cluster1, cluster2)
+			connectivity.DiagnoseConnection(cluster1, cluster2)
 		},
 	}
 )
