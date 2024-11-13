@@ -3,6 +3,7 @@ package connectivity
 import (
 	"clustershift/internal/cli"
 	"clustershift/internal/constants"
+	"clustershift/internal/exit"
 	"clustershift/internal/kube"
 	"context"
 	"fmt"
@@ -14,33 +15,31 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func RunClusterConnectivityProbe(kubeconfigOrigin string, kubeconfigTarget string) {
+func DiagnoseConnection(kubeconfigOrigin string, kubeconfigTarget string) {
 	logger := cli.NewLogger("Running connectivity probe", nil)
 
-	l := logger.Log("Fetching cluster IPs")
 	clusters, err := kube.InitClients(kubeconfigOrigin, kubeconfigTarget)
-	if err != nil {
-		l.Fail(fmt.Sprintf("Error initializing kubernetes clients: %v", err))
-		return
-	}
+	exit.OnErrorWithMessage(logger.Fail("Error initializing kubernetes clients", err))
+
+	RunClusterConnectivityProbe(clusters, logger)
+}
+
+func RunClusterConnectivityProbe(clusters kube.Clusters, logger *cli.Logger) {
+	l := logger.Log("Fetching cluster IPs")
 
 	// Get IPs arrays
 	originClusterIPs, err := getClusterIP(clusters.Origin.Clientset)
-	if err != nil {
-		l.Fail(fmt.Sprintf("Error getting origin cluster IPs: %v", err))
-		return
-	}
+	exit.OnErrorWithMessage(l.Fail("Error getting origin cluster IPs", err))
 
 	targetClusterIPs, err := getClusterIP(clusters.Target.Clientset)
-	if err != nil {
-		l.Fail(fmt.Sprintf("Error getting target cluster IPs: %v", err))
-		return
-	}
+	exit.OnErrorWithMessage(l.Fail("Error getting target cluster IPs", err))
+
 	l.Success("Fetched cluster IPs")
 
 	// Try each combination of IPs
 	for _, originIP := range originClusterIPs {
 		for _, targetIP := range targetClusterIPs {
+			cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
 			l = logger.Log(fmt.Sprintf("Testing connectivity with Origin IP: %s, Target IP: %s", originIP, targetIP))
 
 			l1 := l.Log("Deploying probe resources")
@@ -72,15 +71,15 @@ func RunClusterConnectivityProbe(kubeconfigOrigin string, kubeconfigTarget strin
 			// Create deployments
 			err = clusters.Origin.CreateResourcesFromURL(constants.ConnectivityProbeDeploymentURL)
 			if err != nil {
-				l1.Fail(fmt.Sprintf("Failed to create resources: %v", err))
-				l.Fail("Connectivity test failed")
+				l1.Warning("Failed to create resources", err)
+				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
 				continue
 			}
 
 			err = clusters.Target.CreateResourcesFromURL(constants.ConnectivityProbeDeploymentURL)
 			if err != nil {
-				l1.Fail(fmt.Sprintf("Failed to create resources: %v", err))
-				l.Fail("Connectivity test failed")
+				l1.Warning("Failed to create resources", err)
+				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
 				continue
 			}
 
@@ -96,8 +95,7 @@ func RunClusterConnectivityProbe(kubeconfigOrigin string, kubeconfigTarget strin
 				90*time.Second,
 			)
 			if err != nil {
-				l1.Fail(fmt.Sprintf("Failed waiting for pods: %v", err))
-				l.Fail("Connectivity test failed")
+				l1.Warning("Failed waiting for pods", err)
 				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
 				continue
 			}
@@ -112,8 +110,7 @@ func RunClusterConnectivityProbe(kubeconfigOrigin string, kubeconfigTarget strin
 			// Check Origin -> Target connectivity
 			originSuccess, err := checkConnectivityProbeLogs(&clusters.Origin, constants.ConnectivityProbeDeploymentName, constants.ConnectivityProbeNamespace)
 			if err != nil {
-				l1.Fail(fmt.Sprintf("Failed to check origin cluster logs: %v", err))
-				l.Fail("Connectivity test failed")
+				l1.Warning("Failed to check origin cluster logs", err)
 				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
 				continue
 			}
@@ -121,8 +118,7 @@ func RunClusterConnectivityProbe(kubeconfigOrigin string, kubeconfigTarget strin
 			// Check Target -> Origin connectivity
 			targetSuccess, err := checkConnectivityProbeLogs(&clusters.Target, constants.ConnectivityProbeDeploymentName, constants.ConnectivityProbeNamespace)
 			if err != nil {
-				l1.Fail(fmt.Sprintf("Failed to check target cluster logs: %v", err))
-				l.Fail("Connectivity test failed")
+				l1.Warning("Failed to check target cluster logs", err)
 				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
 				continue
 			}
@@ -131,22 +127,23 @@ func RunClusterConnectivityProbe(kubeconfigOrigin string, kubeconfigTarget strin
 				l1.Success(fmt.Sprintf("Connectivity check successful with Origin IP: %s, Target IP: %s - both clusters can reach each other", originIP, targetIP))
 			} else {
 				if !originSuccess {
-					l1.Fail(fmt.Sprintf("Connectivity check failed: Origin cluster (%s) cannot reach target cluster (%s)", originIP, targetIP))
+					err = fmt.Errorf("Origin cluster (%s) cannot reach target cluster (%s)", originIP, targetIP)
+					l1.Warning("Connectivity check failed", err)
 				}
 				if !targetSuccess {
-					l1.Fail(fmt.Sprintf("Connectivity check failed: Target cluster (%s) cannot reach origin cluster (%s)", targetIP, originIP))
+					err = fmt.Errorf("Target cluster (%s) cannot reach origin cluster (%s)", targetIP, originIP)
+					l1.Warning("Connectivity check failed", err)
 				}
+				continue
 			}
 
 			cleanupResources(&clusters, constants.ConnectivityProbeNamespace, logger)
 			l.Success("Connectivity test successful")
 			logger.Success("Connectivity probe complete")
-			return
 		}
 	}
 
-	l.Fail("All IP combinations failed connectivity check")
-	logger.Fail("Connectivity probe failed")
+	exit.OnErrorWithMessage(l.Fail("All IP combinations failed connectivity check", fmt.Errorf("")))
 }
 
 func getClusterIP(client *kubernetes.Clientset) ([]string, error) {
@@ -274,13 +271,8 @@ func cleanupResources(clusters *kube.Clusters, namespace string, logger *cli.Log
 	}
 
 	err := clusters.Origin.Clientset.CoreV1().Namespaces().Delete(context.TODO(), namespace, deleteOptions)
-	if err != nil {
-		l.Fail(fmt.Sprintf("Warning: Failed to cleanup origin cluster namespace: %v\n", err))
-	}
-
+	exit.OnErrorWithMessage(l.Fail("Failed to cleanup origin cluster namespace", err))
 	err = clusters.Target.Clientset.CoreV1().Namespaces().Delete(context.TODO(), namespace, deleteOptions)
-	if err != nil {
-		l.Fail(fmt.Sprintf("Warning: Failed to cleanup target cluster namespace: %v\n", err))
-	}
+	exit.OnErrorWithMessage(l.Fail("Failed to cleanup target cluster namespace", err))
 	l.Success("Cleaned up probe resources")
 }
