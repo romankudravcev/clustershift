@@ -6,7 +6,7 @@ const (
 	ConnectivityProbeConfigmapURL   = "https://raw.githubusercontent.com/romankudravcev/kube-connectivity-probe/main/infra/Configmap.yml"
 	ConnectivityProbeDeploymentName = "kube-connectivity-probe"
 	ConnectivityProbeConfigmapName  = "connectivity-config"
-	ConnectivityProbeNamespace      = "connectivity-probe"
+	ConnectivityProbeNamespace      = "clustershift-connectivity-probe"
 	ConnectivityProbePort           = 6443
 
 	// Submariner constants
