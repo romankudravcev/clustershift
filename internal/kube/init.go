@@ -4,6 +4,7 @@ import (
 	"clustershift/internal/cluster"
 	"fmt"
 
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -55,16 +56,19 @@ func newCluster(kubeconfigPath string, context string) (*Cluster, error) {
 		return nil, fmt.Errorf("failed to initialize dynamic clientset: %w", err)
 	}
 
+	discoveryClientset, err := discovery.NewDiscoveryClientForConfig(config)
+
 	clusterOptions := cluster.ClusterOptions{
 		KubeconfigPath: kubeconfigPath,
 		Context:        context,
 	}
 
 	return &Cluster{
-		Clientset:        clientset,
-		TraefikClientset: traefikClientset,
-		DynamicClientset: dynamicClientset,
-		ClusterOptions:   &clusterOptions,
+		Clientset:          clientset,
+		TraefikClientset:   traefikClientset,
+		DynamicClientset:   dynamicClientset,
+		DiscoveryClientset: discoveryClientset,
+		ClusterOptions:     &clusterOptions,
 	}, nil
 }
 
