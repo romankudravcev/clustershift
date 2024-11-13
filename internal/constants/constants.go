@@ -1,6 +1,9 @@
 package constants
 
 const (
+	// Debug flag helm
+	Debug = true
+
 	// Conectivity probe constants
 	ConnectivityProbeDeploymentURL  = "https://raw.githubusercontent.com/romankudravcev/kube-connectivity-probe/main/infra/Deployment.yml"
 	ConnectivityProbeConfigmapURL   = "https://raw.githubusercontent.com/romankudravcev/kube-connectivity-probe/main/infra/Configmap.yml"
@@ -17,6 +20,7 @@ const (
 	SubmarinerBrokerNamespace   = "submariner-k8s-broker"
 	SubmarinerOperatorNamespace = "submariner-operator"
 	SubmarinerBrokerClientToken = "submariner-k8s-broker-client-token"
-	// Debug flag helm
-	Debug = true
+
+	// CNPG constants
+	CNPGOperatorURL = "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml"
 )
