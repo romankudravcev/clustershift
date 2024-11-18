@@ -22,6 +22,7 @@ func DeployBroker(c cluster.ClusterOptions) {
 		ReleaseName: constants.SubmarinerBrokerNamespace,
 		ChartName:   constants.SubmarinerBrokerChartName,
 		Wait:        true,
+		Version:     constants.SubmarinerVersion,
 	}
 
 	helm.HelmAddandInstallChart(helmClient, chartOptions)

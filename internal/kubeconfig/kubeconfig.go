@@ -7,14 +7,13 @@ import (
 	"github.com/spf13/viper"
 )
 
-func ProcessKubeconfig(kubeconfigPath string, clusterType string) {
+func ProcessKubeconfig(kubeconfigPath string, clusterType string) error {
 	v := viper.New()
 	v.SetConfigFile(kubeconfigPath)
 	v.SetConfigType("yaml")
 
 	if err := v.ReadInConfig(); err != nil {
-		fmt.Println("Error reading input file:", err)
-		return
+		return fmt.Errorf("Error reading input file: %v", err)
 	}
 
 	newClusterName, newUserName, newContextName := getClusterDetails(clusterType)
@@ -26,16 +25,15 @@ func ProcessKubeconfig(kubeconfigPath string, clusterType string) {
 
 	outputPath := getOutputPath(clusterType)
 	if err := os.MkdirAll("tmp", os.ModePerm); err != nil {
-		fmt.Println("Error creating output directory:", err)
-		return
+		return fmt.Errorf("Error creating output directory: %v", err)
 	}
 
 	if err := v.WriteConfigAs(outputPath); err != nil {
-		fmt.Println("Error writing output file:", err)
-		return
+		return fmt.Errorf("Error writing output file: %v", err)
 	}
 
-	fmt.Printf("Kubeconfig transformation successful! Output written to %s\n", outputPath)
+	//fmt.Printf("Kubeconfig transformation successful! Output written to %s\n", outputPath)
+	return nil
 }
 
 func getClusterDetails(clusterType string) (string, string, string) {

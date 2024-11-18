@@ -55,5 +55,6 @@ Temporary Items
 *.icloud
 
 
-# Log files
+# Clustershift specific files
 logs
+tmp

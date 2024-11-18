@@ -28,6 +28,14 @@ var DefaultConfig = LoggerConfig{
 	TimeFormat: "2006-01-02 15:04:05",
 }
 
+var (
+	OGLOgger *Logger
+)
+
+func SetOGLogger(l *Logger) {
+	OGLOgger = l
+}
+
 func (l *Logger) handleError(message string, err error) {
 	errorMsg := fmt.Sprintf("%s: %v", message, err)
 	if l.status != nil {
@@ -158,6 +166,25 @@ func (l *Logger) writeToFile(message string) {
 
 	if _, err := l.file.WriteString(logMessage); err != nil {
 		l.handleError("Write error", err)
+	}
+}
+
+func LogToFile(message string) {
+	if OGLOgger.file == nil {
+		OGLOgger.handleError("Log file error", fmt.Errorf("attempted to write to nil file"))
+		return
+	}
+
+	timestamp := time.Now().Format(OGLOgger.timeFormat)
+	indent := ""
+	if OGLOgger.status != nil && OGLOgger.status.parent != nil {
+		indent = strings.Repeat("  ", OGLOgger.status.indentLevel)
+	}
+
+	logMessage := fmt.Sprintf("[%s]%s %s\n", timestamp, indent, message)
+
+	if _, err := OGLOgger.file.WriteString(logMessage); err != nil {
+		OGLOgger.handleError("Write error", err)
 	}
 }
 

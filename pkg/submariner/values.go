@@ -2,6 +2,7 @@ package submariner
 
 import (
 	"bufio"
+	"clustershift/internal/cli"
 	"clustershift/internal/constants"
 	"clustershift/internal/kube"
 	"crypto/rand"
@@ -66,6 +67,12 @@ func BuildCIDRs(c kube.Clusters) *CIDRs {
 	podCIDRTarget = fetchOrPrompt(podCIDRTarget, func() (string, error) { return c.Target.FetchPodCIDRs() }, "target", "Pod CIDR")
 	brokerURL = fetchOrPrompt(brokerURL, func() (string, error) { return c.Origin.FetchKubernetesAPIEndpoint() }, "", "Kubernetes API endpoint")
 
+	cli.LogToFile(fmt.Sprintf("Pod CIDR Origin: %s\n", podCIDROrigin))
+	cli.LogToFile(fmt.Sprintf("Pod CIDR Target: %s\n", podCIDRTarget))
+	cli.LogToFile(fmt.Sprintf("Service CIDR Origin: %s\n", serviceCIDROrigin))
+	cli.LogToFile(fmt.Sprintf("Service CIDR Target: %s\n", serviceCIDRTarget))
+	cli.LogToFile(fmt.Sprintf("Broker URL: %s\n", brokerURL))
+
 	return &CIDRs{
 		podCIDROrigin:     podCIDROrigin,
 		podCIDRTarget:     podCIDRTarget,
@@ -98,15 +105,9 @@ func GenerateRandomString(length int) string {
 	bytes := make([]byte, length)
 	_, err := rand.Read(bytes)
 	if err != nil {
+		cli.LogToFile(fmt.Sprintf("Error generating random string"))
 		return ""
 	}
+	cli.LogToFile(fmt.Sprintf("Generated random string: %s\n", base64.URLEncoding.EncodeToString(bytes)[:length]))
 	return base64.URLEncoding.EncodeToString(bytes)[:length]
-}
-
-func DecodeBase64String(encoded string) string {
-	decoded, err := base64.URLEncoding.DecodeString(encoded)
-	if err != nil {
-		return ""
-	}
-	return string(decoded)
 }
