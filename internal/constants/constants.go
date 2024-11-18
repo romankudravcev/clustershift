@@ -8,8 +8,9 @@ const (
 	ConnectivityProbeDeploymentURL  = "https://raw.githubusercontent.com/romankudravcev/kube-connectivity-probe/main/infra/Deployment.yml"
 	ConnectivityProbeConfigmapURL   = "https://raw.githubusercontent.com/romankudravcev/kube-connectivity-probe/main/infra/Configmap.yml"
 	ConnectivityProbeDeploymentName = "kube-connectivity-probe"
+	ConnectivityProbeLabelSelector  = "app=" + ConnectivityProbeDeploymentName
 	ConnectivityProbeConfigmapName  = "connectivity-config"
-	ConnectivityProbeNamespace      = "clustershift-connectivity-probe"
+	ConnectivityProbeNamespace      = "connectivity-probe"
 	ConnectivityProbePort           = 6443
 
 	// Submariner constants
@@ -20,7 +21,10 @@ const (
 	SubmarinerBrokerNamespace   = "submariner-k8s-broker"
 	SubmarinerOperatorNamespace = "submariner-operator"
 	SubmarinerBrokerClientToken = "submariner-k8s-broker-client-token"
+	SubmarinerVersion           = "0.19"
 
 	// CNPG constants
-	CNPGOperatorURL = "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml"
+	CNPGOperatorURL   = "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml"
+	CNPGNamespace     = "cnpg-system"
+	CNPGLabelSelector = "app.kubernetes.io/name=cloudnative-pg"
 )
