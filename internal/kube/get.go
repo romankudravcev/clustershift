@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // FetchResources fetches all resources by resource type.
@@ -65,4 +66,50 @@ func (c Cluster) FetchResource(resourceType ResourceType, name string, namespace
 	default:
 		return nil, fmt.Errorf("unsupported resource type: %s", resourceType)
 	}
+}
+
+// FetchCustomResources fetches all custom resources of a specific type across all namespaces
+func (c Cluster) FetchCustomResources(group, version, resource string) ([]map[string]interface{}, error) {
+    // Define the GVR (GroupVersionResource)
+    gvr := schema.GroupVersionResource{
+        Group:    group,
+        Version:  version,
+        Resource: resource,
+    }
+
+    // List the custom resources
+    list, err := c.DynamicClientset.Resource(gvr).
+        Namespace("").  // empty namespace means all namespaces
+        List(context.TODO(), metav1.ListOptions{})
+    if err != nil {
+        return nil, err
+    }
+
+    // Convert to a slice of maps for generic handling
+    var resources []map[string]interface{}
+    for _, item := range list.Items {
+        resources = append(resources, item.Object)
+    }
+
+    return resources, nil
+}
+
+// FetchCustomResource fetches a single custom resource by name and namespace
+func (c Cluster) FetchCustomResource(group, version, resource, namespace, name string) (map[string]interface{}, error) {
+    // Define the GVR (GroupVersionResource)
+    gvr := schema.GroupVersionResource{
+        Group:    group,
+        Version:  version,
+        Resource: resource,
+    }
+
+    // Get the specific custom resource
+    obj, err := c.DynamicClientset.Resource(gvr).
+        Namespace(namespace).
+        Get(context.TODO(), name, metav1.GetOptions{})
+    if err != nil {
+        return nil, err
+    }
+
+    return obj.Object, nil
 }
