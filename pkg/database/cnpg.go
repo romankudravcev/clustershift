@@ -9,6 +9,8 @@ import (
 	"fmt"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func InstallOperator(c kube.Cluster, logger *cli.Logger) {
@@ -90,7 +92,6 @@ func addRWServiceToYaml(c kube.Cluster, resources []map[string]interface{}) erro
 	return nil
 }
 
-
 func AddClustersetDNS(c kube.Cluster, logger *cli.Logger) {
 	l := logger.Log("Adding submariner clusterset DNS")
 
@@ -111,4 +112,101 @@ func AddClustersetDNS(c kube.Cluster, logger *cli.Logger) {
 	l1.Success("Updated cluster resources")
 
 	l.Success("Added submariner clusterset DNS")
+}
+
+func createReplicaCluster(originCluster *apiv1.Cluster) (*apiv1.Cluster, error) {
+	// Create a deep copy of the origin cluster
+	replicaCluster := originCluster.DeepCopy()
+
+	// Reset ObjectMeta but keep namespace and name
+	replicaCluster.ObjectMeta = metav1.ObjectMeta{
+		Name:      originCluster.Name,
+		Namespace: originCluster.Namespace,
+	}
+
+	// Clear status
+	replicaCluster.Status = apiv1.ClusterStatus{}
+
+	// Configure bootstrap for recovery
+	replicaCluster.Spec.Bootstrap = &apiv1.BootstrapConfiguration{
+		PgBaseBackup: &apiv1.BootstrapPgBaseBackup{
+			Source: originCluster.Name,
+		},
+	}
+
+	// Configure replica for replication
+	enabled := true
+	replicaCluster.Spec.ReplicaCluster = &apiv1.ReplicaClusterConfiguration{
+		Enabled: &enabled,
+		Source:  originCluster.Name,
+	}
+
+	// Configure external cluster for replication
+	replicaCluster.Spec.ExternalClusters = []apiv1.ExternalCluster{
+		{
+			Name: originCluster.Name,
+			ConnectionParameters: map[string]string{
+				"host":    "origin." + originCluster.Name + "-rw." + originCluster.Namespace + ".svc.clusterset.local",
+				"user":    "streaming_replica",
+				"dbname":  "postgres",
+				"sslmode": "verify-full",
+			},
+
+			SSLCert: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: originCluster.Name + "-replication",
+				},
+				Key: "tls.crt",
+			},
+			SSLKey: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: originCluster.Name + "-replication",
+				},
+				Key: "tls.key",
+			},
+			SSLRootCert: &v1.SecretKeySelector{
+				LocalObjectReference: v1.LocalObjectReference{
+					Name: originCluster.Name + "-ca",
+				},
+				Key: "ca.crt",
+			},
+		},
+	}
+
+	return replicaCluster, nil
+}
+
+func CreateReplicaClusters(c kube.Clusters, logger *cli.Logger) {
+	l := logger.Log("Creating replica cluster")
+
+	// Fetch cnpg clusters from origin
+	l1 := l.Log("Fetching origin cnpg clusters")
+	resources, err := c.Origin.FetchCustomResources(
+		"postgresql.cnpg.io",
+		"v1",
+		"clusters",
+	)
+	exit.OnErrorWithMessage(l1.Fail("Error fetching custom resources", err))
+	l1.Success("Fetched origin clusters")
+
+	l1 = l.Log("Creating replica cluster from origin")
+	for _, resource := range resources {
+		// Convert origin cluster to API object
+		originCluster, err := convertToCluster(resource)
+		exit.OnErrorWithMessage(l1.Fail("Error converting origin cluster", err))
+
+		// Create replica cluster from origin
+		replicaCluster, err := createReplicaCluster(originCluster)
+		exit.OnErrorWithMessage(l1.Fail("Error creating replica cluster", err))
+
+		cli.LogToFile(fmt.Sprintf("%v", replicaCluster))
+		// Convert replica cluster to data
+		replicaClusterData, err := convertFromCluster(replicaCluster)
+		exit.OnErrorWithMessage(l1.Fail("Error converting replica cluster", err))
+
+		// Create replica cluster
+		err = c.Target.CreateCustomResource(originCluster.Namespace, replicaClusterData, l1)
+		exit.OnErrorWithMessage(l1.Fail("Error applying replica cluster", err))
+	}
+	l1.Success("Created replica clusters")
 }
