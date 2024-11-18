@@ -87,10 +87,20 @@ func RunClusterConnectivityProbe(clusters kube.Clusters, logger *cli.Logger) {
 
 			// Check if the pods are running
 			l1 = l.Log("Waiting for pods to be ready")
-			err = waitForPodsReady(
-				clusters.Origin.Clientset,
-				clusters.Target.Clientset,
-				constants.ConnectivityProbeDeploymentName,
+			err = kube.WaitForPodsReady(
+				clusters.Origin,
+				constants.ConnectivityProbeLabelSelector,
+				constants.ConnectivityProbeNamespace,
+				90*time.Second,
+			)
+			if err != nil {
+				l1.Warning("Failed waiting for pods", err)
+				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
+				continue
+			}
+			err = kube.WaitForPodsReady(
+				clusters.Target,
+				constants.ConnectivityProbeLabelSelector,
 				constants.ConnectivityProbeNamespace,
 				90*time.Second,
 			)
@@ -134,16 +144,19 @@ func RunClusterConnectivityProbe(clusters kube.Clusters, logger *cli.Logger) {
 					err = fmt.Errorf("Target cluster (%s) cannot reach origin cluster (%s)", targetIP, originIP)
 					l1.Warning("Connectivity check failed", err)
 				}
+				err = fmt.Errorf("Connectivity check failed")
+				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
 				continue
 			}
 
 			cleanupResources(&clusters, constants.ConnectivityProbeNamespace, logger)
 			l.Success("Connectivity test successful")
 			logger.Success("Connectivity probe complete")
+			return // Exit if connectivity check is successful
 		}
 	}
-
-	exit.OnErrorWithMessage(l.Fail("All IP combinations failed connectivity check", fmt.Errorf("")))
+	err = fmt.Errorf("All IP combinations failed connectivity check")
+	exit.OnErrorWithMessage(l.Fail("Connectivity check failed", err))
 }
 
 func getClusterIP(client *kubernetes.Clientset) ([]string, error) {
@@ -193,50 +206,6 @@ func createConfigMap(name string, namespace string, targetIP string, port string
 	}
 }
 
-func waitForPodsReady(originClient, targetClient *kubernetes.Clientset, name string, namespace string, timeout time.Duration) error {
-	start := time.Now()
-	for {
-		// Check if timeout exceeded
-		if time.Since(start) > timeout {
-			return fmt.Errorf("timeout waiting for pods to be ready after %v", timeout)
-		}
-
-		// Check origin cluster pods
-		originPods, _ := originClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
-			LabelSelector: "app=" + name,
-		})
-
-		// Check target cluster pods
-		targetPods, _ := targetClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
-			LabelSelector: "app=" + name,
-		})
-
-		// Check if pods exist and are running
-		originReady := isPodRunning(originPods)
-		targetReady := isPodRunning(targetPods)
-
-		if originReady && targetReady {
-			return nil
-		}
-
-		// Wait before next check
-		time.Sleep(5 * time.Second)
-	}
-}
-
-func isPodRunning(pods *corev1.PodList) bool {
-	if len(pods.Items) == 0 {
-		return false
-	}
-
-	for _, pod := range pods.Items {
-		if pod.Status.Phase != corev1.PodRunning {
-			return false
-		}
-	}
-	return true
-}
-
 func checkConnectivityProbeLogs(cluster *kube.Cluster, name string, namespace string) (bool, error) {
 	// Get the pod
 	pods, err := cluster.Clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
@@ -270,9 +239,9 @@ func cleanupResources(clusters *kube.Clusters, namespace string, logger *cli.Log
 		PropagationPolicy: &deletePolicy,
 	}
 
-	err := clusters.Origin.Clientset.CoreV1().Namespaces().Delete(context.TODO(), namespace, deleteOptions)
-	exit.OnErrorWithMessage(l.Fail("Failed to cleanup origin cluster namespace", err))
-	err = clusters.Target.Clientset.CoreV1().Namespaces().Delete(context.TODO(), namespace, deleteOptions)
-	exit.OnErrorWithMessage(l.Fail("Failed to cleanup target cluster namespace", err))
+	clusters.Origin.Clientset.CoreV1().Namespaces().Delete(context.TODO(), namespace, deleteOptions)
+	//exit.OnErrorWithMessage(l.Fail("Failed to cleanup origin cluster namespace", err))
+	clusters.Target.Clientset.CoreV1().Namespaces().Delete(context.TODO(), namespace, deleteOptions)
+	//exit.OnErrorWithMessage(l.Fail("Failed to cleanup target cluster namespace", err))
 	l.Success("Cleaned up probe resources")
 }
