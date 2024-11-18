@@ -3,8 +3,10 @@ package submariner
 import (
 	"clustershift/internal/cli"
 	"clustershift/internal/constants"
+	"clustershift/internal/decoder"
 	"clustershift/internal/kube"
 	"encoding/base64"
+	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 )
@@ -30,10 +32,11 @@ func InstallSubmariner(c kube.Clusters, logger *cli.Logger) {
 	psk := GenerateRandomString(64)
 	secretInterface, err := c.Origin.FetchResource(kube.Secret, constants.SubmarinerBrokerClientToken, constants.SubmarinerBrokerNamespace)
 	if err != nil {
+		cli.LogToFile(fmt.Sprintf("Error fetching secret: %v", err))
 		panic(err)
 	}
 	secret := secretInterface.(*v1.Secret)
-	token := DecodeBase64String(base64.StdEncoding.EncodeToString(secret.Data["token"]))
+	token := decoder.DecodeBase64String(base64.StdEncoding.EncodeToString(secret.Data["token"]))
 	ca := base64.StdEncoding.EncodeToString(secret.Data["ca.crt"])
 
 	originJoinOptions := SubmarinerJoinOptions{
