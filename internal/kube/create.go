@@ -2,11 +2,13 @@ package kube
 
 import (
 	"bytes"
+	"clustershift/internal/cli"
 	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	traefikv1alpha1 "github.com/traefik/traefik/v3/pkg/provider/kubernetes/crd/traefikio/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -16,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	yamlserializer "k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -158,6 +161,64 @@ func (c Cluster) CreateResourcesFromURL(url string) error {
 
 		//fmt.Printf("Successfully created %s/%s in namespace %s\n",
 		//    gvk.Kind, obj.GetName(), namespace)
+	}
+
+	return nil
+}
+
+func (c Cluster) CreateCustomResource(namespace string, resource map[string]interface{}, logger *cli.Logger) error {
+	apiVersion, ok := resource["apiVersion"].(string)
+	if !ok {
+		return fmt.Errorf("apiVersion not found or not a string")
+	}
+
+	kind, ok := resource["kind"].(string)
+	if !ok {
+		return fmt.Errorf("kind not found or not a string")
+	}
+
+	// Parse group and version
+	var group, version string
+	parts := strings.Split(apiVersion, "/")
+	if len(parts) == 2 {
+		group = parts[0]
+		version = parts[1]
+	} else {
+		group = ""
+		version = parts[0]
+	}
+
+	// Get API group resources and create a REST mapper
+	groupResources, err := restmapper.GetAPIGroupResources(c.DiscoveryClientset)
+	if err != nil {
+		return fmt.Errorf("failed to get API group resources: %v", err)
+	}
+	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
+
+	// Get the REST mapping
+	gvk := schema.GroupVersionKind{
+		Group:   group,
+		Version: version,
+		Kind:    kind,
+	}
+
+	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		return fmt.Errorf("failed to get REST mapping: %v", err)
+	}
+
+	// Create unstructured object
+	unstructuredObj := &unstructured.Unstructured{
+		Object: resource,
+	}
+
+	// Use the resource from the mapping
+	_, err = c.DynamicClientset.Resource(mapping.Resource).
+		Namespace(namespace).
+		Create(context.TODO(), unstructuredObj, metav1.CreateOptions{})
+
+	if err != nil {
+		return fmt.Errorf("failed to create resource: %v", err)
 	}
 
 	return nil
