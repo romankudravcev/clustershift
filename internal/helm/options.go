@@ -14,4 +14,5 @@ type ChartOptions struct {
 	ChartName   string
 	Values      string
 	Wait        bool
+	Version     string
 }

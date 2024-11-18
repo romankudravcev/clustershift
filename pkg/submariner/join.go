@@ -1,6 +1,7 @@
 package submariner
 
 import (
+	"clustershift/internal/cli"
 	"clustershift/internal/cluster"
 	"clustershift/internal/constants"
 	"clustershift/internal/helm"
@@ -18,16 +19,17 @@ func JoinCluster(c cluster.ClusterOptions, s SubmarinerJoinOptions) {
 	helmClient := helm.GetHelmClient(helmOptions)
 	values, err := GenerateJoinArgs(s)
 	if err != nil {
-		fmt.Printf("Error generating joing args: %v", err)
+		cli.LogToFile(fmt.Sprintf("Error generating joing args: %v", err))
 	}
 
 	chartOptions := helm.ChartOptions{
 		RepoName:    constants.SubmarinerRepoName,
 		RepoURL:     constants.SubmarinerRepoURL,
-		ReleaseName: constants.SubmarinerBrokerNamespace,
-		ChartName:   constants.SubmarinerBrokerChartName,
+		ReleaseName: constants.SubmarinerOperatorNamespace,
+		ChartName:   constants.SubmarinerOperatorChartName,
 		Values:      values,
 		Wait:        true,
+		Version:     constants.SubmarinerVersion,
 	}
 
 	helm.HelmAddandInstallChart(helmClient, chartOptions)
