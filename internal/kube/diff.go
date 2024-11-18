@@ -25,17 +25,11 @@ func (c *Clusters) CreateResourceDiff(resourceType ResourceType) {
 	for _, resource := range diffResources.([]interface{}) {
 		newResource := cleanResourceForCreation(resource)
 		resourceValue := reflect.ValueOf(newResource).Elem()
+
 		namespace := resourceValue.FieldByName("ObjectMeta").FieldByName("Namespace").String()
 		name := resourceValue.FieldByName("ObjectMeta").FieldByName("Name").String()
 
-		var createErr error
-		createErr = c.Target.CreateResource(resourceType, name, namespace, newResource)
-
-		if createErr != nil {
-			//fmt.Printf("Error creating %s %s in namespace %s: %v\n", resourceType, name, namespace, createErr)
-			continue
-		}
-		//fmt.Printf("Successfully created %s %s in namespace %s\n", resourceType, name, namespace)
+		c.Target.CreateResource(resourceType, name, namespace, newResource)
 	}
 }
 
@@ -82,12 +76,42 @@ func cleanResourceForCreation(resource interface{}) interface{} {
 	// Create a new instance of the resource
 	newResource := reflect.New(resourceValue.Type()).Elem()
 
-	// Copy the relevant fields from the original resource
-	newResource.FieldByName("ObjectMeta").Set(resourceValue.FieldByName("ObjectMeta"))
-	newResource.FieldByName("TypeMeta").Set(resourceValue.FieldByName("TypeMeta"))
+	// Copy TypeMeta (ensure kind and apiVersion are set)
+	typeMeta := resourceValue.FieldByName("TypeMeta")
+	newTypeMeta := newResource.FieldByName("TypeMeta")
+	if typeMeta.IsValid() && newTypeMeta.IsValid() {
+		kind := typeMeta.FieldByName("Kind")
+		apiVersion := typeMeta.FieldByName("APIVersion")
+		if kind.IsValid() {
+			newTypeMeta.FieldByName("Kind").Set(kind)
+		}
+		if apiVersion.IsValid() {
+			newTypeMeta.FieldByName("APIVersion").Set(apiVersion)
+		}
+	}
 
-	objectMetaField := newResource.FieldByName("ObjectMeta")
-	objectMetaField.FieldByName("ResourceVersion").SetString("")
+	// Copy and clean ObjectMeta
+	objectMeta := resourceValue.FieldByName("ObjectMeta")
+	newObjectMeta := newResource.FieldByName("ObjectMeta")
+	if objectMeta.IsValid() && newObjectMeta.IsValid() {
+		// Copy only the essential fields
+		fieldsToKeep := []string{"Name", "Namespace", "Labels", "Annotations"}
+		for _, field := range fieldsToKeep {
+			value := objectMeta.FieldByName(field)
+			if value.IsValid() {
+				newObjectMeta.FieldByName(field).Set(value)
+			}
+		}
+	}
+
+	// Copy the spec/data if it exists (for different resource types)
+	for _, field := range []string{"Data", "StringData", "Spec"} {
+		sourceField := resourceValue.FieldByName(field)
+		targetField := newResource.FieldByName(field)
+		if sourceField.IsValid() && targetField.IsValid() {
+			targetField.Set(sourceField)
+		}
+	}
 
 	return newResource.Addr().Interface()
 }

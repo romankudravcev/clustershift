@@ -1,7 +1,7 @@
 package clustershift
 
 import (
-	"fmt"
+	"clustershift/pkg/migration"
 
 	"github.com/spf13/cobra"
 )
@@ -14,7 +14,7 @@ var (
 		Use:   "migrate",
 		Short: "migrate origin cluster to target cluster",
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Print("migrating from ", kubeconfig1, " to ", kubeconfig2)
+			migration.Migrate(kubeconfig1, kubeconfig2)
 		},
 	}
 )
