@@ -13,6 +13,7 @@ import (
 	traefikv1alpha1 "github.com/traefik/traefik/v3/pkg/provider/kubernetes/crd/traefikio/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,6 +80,21 @@ func (c Cluster) CreateNewNamespace(name string) {
 	if err != nil && err.Error() == "namespaces \""+name+"\" already exists" {
 		// Log that namespace already exists
 		//fmt.Printf("Namespace %s already exists\n", name)
+	}
+}
+
+func (c Cluster) CreateConfigmap(name string, namespace string, data map[string]string) {
+	configMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: data,
+	}
+
+	err := c.CreateResource(ConfigMap, name, namespace, configMap)
+	if err != nil {
+		//TODO error handling
 	}
 }
 
