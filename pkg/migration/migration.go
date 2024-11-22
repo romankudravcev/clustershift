@@ -8,6 +8,7 @@ import (
 	"clustershift/internal/kubeconfig"
 	"clustershift/pkg/connectivity"
 	cnpg "clustershift/pkg/database"
+	"clustershift/pkg/redirect"
 	"clustershift/pkg/submariner"
 	"fmt"
 	"time"
@@ -32,7 +33,6 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 		return
 	}
 	l.Success("Initialized kubernetes clients")
-
 	// Check connectivity between clusters
 	l = logger.Log("Checking connectivity between clusters")
 	connectivity.RunClusterConnectivityProbe(clusters, l)
@@ -52,6 +52,7 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 	kube.WaitForPodsReady(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
 	cnpg.CreateReplicaClusters(clusters, l)
 	cnpg.AddClustersetDNS(clusters.Origin, l)
+	cnpg.ExportRWServices(clusters.Origin, l)
 	l.Success("cnpg databases migrated")
 
 	l = logger.Log("Migrating resources")
@@ -64,6 +65,10 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 	clusters.CreateResourceDiff(kube.Middleware)
 	clusters.CreateResourceDiff(kube.TraefikService)
 	l.Success("Resources migrated")
+
+	l = logger.Log("Redirect request from origin")
+	redirect.InitializeRequestForwarding(clusters, l)
+	l.Success("Established request forwarding")
 
 	logger.Success("Migration complete")
 }
