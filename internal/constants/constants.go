@@ -13,6 +13,11 @@ const (
 	ConnectivityProbeNamespace      = "connectivity-probe"
 	ConnectivityProbePort           = 6443
 
+	// Proxy constants
+	HttpProxyURL       = "https://raw.githubusercontent.com/romankudravcev/reverse-proxy-http/main/Deployment.yml"
+	HttpProxyPort      = 8743
+	HttpProxyNamespace = "proxy"
+
 	// Submariner constants
 	SubmarinerRepoName          = "submariner-latest"
 	SubmarinerRepoURL           = "https://submariner-io.github.io/submariner-charts/charts"
