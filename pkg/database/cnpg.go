@@ -5,6 +5,7 @@ import (
 	"clustershift/internal/constants"
 	"clustershift/internal/exit"
 	"clustershift/internal/kube"
+	"clustershift/pkg/submariner"
 	"encoding/json"
 	"fmt"
 
@@ -209,4 +210,28 @@ func CreateReplicaClusters(c kube.Clusters, logger *cli.Logger) {
 		exit.OnErrorWithMessage(l1.Fail("Error applying replica cluster", err))
 	}
 	l1.Success("Created replica clusters")
+}
+
+func ExportRWServices(c kube.Cluster, logger *cli.Logger) {
+	l := logger.Log("Exporting cnpg rw services")
+
+	// Fetch all cnpg clusters
+	l1 := l.Log("fetching cnpg clusters")
+	resources, err := c.FetchCustomResources(
+		"postgresql.cnpg.io",
+		"v1",
+		"clusters",
+	)
+	exit.OnErrorWithMessage(l1.Fail("Error fetching custom resources", err))
+	l1.Success("Fetched clusters")
+
+	// Export services
+	for _, resource := range resources {
+		clusterName := resource["metadata"].(map[string]interface{})["name"].(string)
+		namespace := resource["metadata"].(map[string]interface{})["namespace"].(string)
+		serviceName := fmt.Sprintf("%s-rw", clusterName)
+		submariner.Export(c, namespace, serviceName, "", l)
+	}
+
+	l.Success("Service export successful")
 }

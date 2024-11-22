@@ -7,11 +7,14 @@ require (
 	github.com/mittwald/go-helm-client v0.12.14
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.18.2
+	github.com/submariner-io/lighthouse v0.19.0
+	github.com/submariner-io/subctl v0.19.0
 	github.com/traefik/traefik/v3 v3.2.0
 	helm.sh/helm/v3 v3.16.1
 	k8s.io/api v0.31.1
 	k8s.io/apimachinery v0.31.1
 	k8s.io/client-go v0.31.1
+	sigs.k8s.io/mcs-api v0.1.0
 )
 
 require (
@@ -127,7 +130,7 @@ require (
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
-	github.com/rs/zerolog v1.29.0 // indirect
+	github.com/rs/zerolog v1.33.0 // indirect
 	github.com/rubenv/sql-migrate v1.7.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
