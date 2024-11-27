@@ -15,7 +15,7 @@ type Logger struct {
 	mu         sync.Mutex
 	timeFormat string
 	closed     bool
-	parent     *Logger // Add parent reference to Logger
+	parent     *Logger
 }
 
 type LoggerConfig struct {
