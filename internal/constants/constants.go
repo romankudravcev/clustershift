@@ -14,9 +14,10 @@ const (
 	ConnectivityProbePort           = 6443
 
 	// Proxy constants
-	HttpProxyURL       = "https://raw.githubusercontent.com/romankudravcev/reverse-proxy-http/main/Deployment.yml"
-	HttpProxyPort      = 8743
-	HttpProxyNamespace = "proxy"
+	HttpProxyDeploymentURL = "https://raw.githubusercontent.com/romankudravcev/reverse-proxy-http/main/Deployment.yml"
+	HttpProxyIngressURL    = "https://raw.githubusercontent.com/romankudravcev/reverse-proxy-http/main/Ingress.yml"
+	HttpProxyPort          = 8743
+	HttpProxyNamespace     = "clustershift"
 
 	// Submariner constants
 	SubmarinerRepoName          = "submariner-latest"
