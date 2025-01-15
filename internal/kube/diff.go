@@ -29,7 +29,9 @@ func (c *Clusters) CreateResourceDiff(resourceType ResourceType) {
 		namespace := resourceValue.FieldByName("ObjectMeta").FieldByName("Namespace").String()
 		name := resourceValue.FieldByName("ObjectMeta").FieldByName("Name").String()
 
-		c.Target.CreateResource(resourceType, name, namespace, newResource)
+		if namespace != "clustershift" {
+			c.Target.CreateResource(resourceType, name, namespace, newResource)
+		}
 	}
 }
 
