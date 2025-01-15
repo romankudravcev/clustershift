@@ -60,9 +60,10 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 	l = logger.Log("Migrate cnpg databases")
 	cnpg.InstallOperator(clusters.Target, l)
 	kube.WaitForPodsReady(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
-	cnpg.CreateReplicaClusters(clusters, l)
 	cnpg.AddClustersetDNS(clusters.Origin, l)
 	cnpg.ExportRWServices(clusters.Origin, l)
+	cnpg.CreateReplicaClusters(clusters, l)
+
 	l.Success("cnpg databases migrated")
 
 	l = logger.Log("Migrating resources")
@@ -75,6 +76,10 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 	clusters.CreateResourceDiff(kube.Middleware)
 	clusters.CreateResourceDiff(kube.TraefikService)
 	l.Success("Resources migrated")
+
+	// Demote and promote databases
+	cnpg.DemoteOriginCluster(clusters.Origin, logger)
+	cnpg.DisableReplication(clusters.Target, logger)
 
 	l = logger.Log("Enable request forwarding from origin")
 	redirect.EnableRequestForwarding(clusters, l)

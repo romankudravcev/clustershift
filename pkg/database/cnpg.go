@@ -8,6 +8,7 @@ import (
 	"clustershift/pkg/submariner"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	v1 "k8s.io/api/core/v1"
@@ -21,7 +22,7 @@ func InstallOperator(c kube.Cluster, logger *cli.Logger) {
 	l.Success("Installed cloudnative-pg operator")
 }
 
-func convertToCluster(data map[string]interface{}) (*apiv1.Cluster, error) {
+func ConvertToCluster(data map[string]interface{}) (*apiv1.Cluster, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return nil, err
@@ -35,7 +36,7 @@ func convertToCluster(data map[string]interface{}) (*apiv1.Cluster, error) {
 	return cluster, nil
 }
 
-func convertFromCluster(cluster *apiv1.Cluster) (map[string]interface{}, error) {
+func ConvertFromCluster(cluster *apiv1.Cluster) (map[string]interface{}, error) {
 	// Marshal cluster to JSON
 	jsonData, err := json.Marshal(cluster)
 	if err != nil {
@@ -193,7 +194,7 @@ func CreateReplicaClusters(c kube.Clusters, logger *cli.Logger) {
 	l1 = l.Log("Creating replica cluster from origin")
 	for _, resource := range resources {
 		// Convert origin cluster to API object
-		originCluster, err := convertToCluster(resource)
+		originCluster, err := ConvertToCluster(resource)
 		exit.OnErrorWithMessage(l1.Fail("Error converting origin cluster", err))
 
 		// Create replica cluster from origin
@@ -202,12 +203,16 @@ func CreateReplicaClusters(c kube.Clusters, logger *cli.Logger) {
 
 		cli.LogToFile(fmt.Sprintf("%v", replicaCluster))
 		// Convert replica cluster to data
-		replicaClusterData, err := convertFromCluster(replicaCluster)
+		replicaClusterData, err := ConvertFromCluster(replicaCluster)
 		exit.OnErrorWithMessage(l1.Fail("Error converting replica cluster", err))
 
 		// Create replica cluster
 		err = c.Target.CreateCustomResource(originCluster.Namespace, replicaClusterData, l1)
 		exit.OnErrorWithMessage(l1.Fail("Error applying replica cluster", err))
+
+		// Wait for replica cluster to be ready
+		err = kube.WaitForCNPGClusterReady(c.Target.DynamicClientset, originCluster.Name, originCluster.Namespace, 1*time.Hour)
+		exit.OnErrorWithMessage(l1.Fail("Timeout while waiting for replica cluster bootstrap", err))
 	}
 	l1.Success("Created replica clusters")
 }
@@ -234,4 +239,111 @@ func ExportRWServices(c kube.Cluster, logger *cli.Logger) {
 	}
 
 	l.Success("Service export successful")
+}
+
+func DemoteOriginCluster(c kube.Cluster, logger *cli.Logger) {
+	l := logger.Log("Demote cnpg clusters")
+
+	// Fetch all cnpg clusters
+	l1 := l.Log("fetching cnpg clusters")
+	resources, err := c.FetchCustomResources(
+		"postgresql.cnpg.io",
+		"v1",
+		"clusters",
+	)
+	exit.OnErrorWithMessage(l1.Fail("Error fetching custom resources", err))
+	l1.Success("Fetched clusters")
+
+	for _, resource := range resources {
+		cluster, err := ConvertToCluster(resource)
+		exit.OnErrorWithMessage(l1.Fail("Error converting origin cluster", err))
+
+		// Update cluster spec
+		cluster.Spec.ExternalClusters = []apiv1.ExternalCluster{
+			{
+				Name: cluster.Name + "-new",
+				ConnectionParameters: map[string]string{
+					"host":    "target." + cluster.Name + "-rw." + cluster.Namespace + ".svc.clusterset.local",
+					"user":    "streaming_replica",
+					"dbname":  "postgres",
+					"sslmode": "verify-full",
+				},
+				SSLCert: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: cluster.Name + "-replication",
+					},
+					Key: "tls.crt",
+				},
+				SSLKey: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: cluster.Name + "-replication",
+					},
+					Key: "tls.key",
+				},
+				SSLRootCert: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{
+						Name: cluster.Name + "-ca",
+					},
+					Key: "ca.crt",
+				},
+			},
+		}
+
+		cluster.Spec.ReplicaCluster = &apiv1.ReplicaClusterConfiguration{
+			Primary: cluster.Name + "-new",
+			Source:  cluster.Name + "-new",
+		}
+
+		// Convert the updated cluster back to unstructured
+		updatedObj, err := ConvertFromCluster(cluster)
+		if err != nil {
+			exit.OnErrorWithMessage(l1.Fail("Error converting updated cluster to unstructured", err))
+		}
+
+		// Update the resource
+		err = c.UpdateCustomResource(cluster.Namespace, updatedObj)
+		if err != nil {
+			exit.OnErrorWithMessage(l1.Fail(fmt.Sprintf("Error updating cluster %s in namespace %s", cluster.Name, cluster.Namespace), err))
+		}
+
+		l1.Success(fmt.Sprintf("Successfully updated cluster %s in namespace %s", cluster.Name, cluster.Namespace))
+	}
+	l.Success("Completed demoting clusters")
+}
+
+func DisableReplication(c kube.Cluster, logger *cli.Logger) {
+	l := logger.Log("Demote cnpg clusters")
+
+	// Fetch all cnpg clusters
+	l1 := l.Log("fetching cnpg clusters")
+	resources, err := c.FetchCustomResources(
+		"postgresql.cnpg.io",
+		"v1",
+		"clusters",
+	)
+	exit.OnErrorWithMessage(l1.Fail("Error fetching custom resources", err))
+	l1.Success("Fetched clusters")
+
+	for _, resource := range resources {
+		cluster, err := ConvertToCluster(resource)
+		exit.OnErrorWithMessage(l1.Fail("Error converting origin cluster", err))
+
+		enabled := false
+		cluster.Spec.ReplicaCluster.Enabled = &enabled
+
+		// Convert the updated cluster back to unstructured
+		updatedObj, err := ConvertFromCluster(cluster)
+		if err != nil {
+			exit.OnErrorWithMessage(l1.Fail("Error converting updated cluster to unstructured", err))
+		}
+
+		// Update the resource
+		err = c.UpdateCustomResource(cluster.Namespace, updatedObj)
+		if err != nil {
+			exit.OnErrorWithMessage(l1.Fail(fmt.Sprintf("Error updating cluster %s in namespace %s", cluster.Name, cluster.Namespace), err))
+		}
+
+		l1.Success(fmt.Sprintf("Successfully updated cluster %s in namespace %s", cluster.Name, cluster.Namespace))
+	}
+	l.Success("Completed demoting clusters")
 }
