@@ -7,42 +7,62 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 )
 
 func WaitForPodsReady(c Cluster, labelSelector string, namespace string, timeout time.Duration) error {
-	start := time.Now()
+	listOptions := metav1.ListOptions{
+		LabelSelector: labelSelector,
+	}
+
+	watcher, err := c.Clientset.CoreV1().Pods(namespace).Watch(context.TODO(), listOptions)
+	if err != nil {
+		return fmt.Errorf("error creating watch: %v", err)
+	}
+	defer watcher.Stop()
+
+	timeoutCh := time.After(timeout)
+
 	for {
-		// Check if timeout exceeded
-		if time.Since(start) > timeout {
+		select {
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				return fmt.Errorf("watch channel closed")
+			}
+
+			switch event.Type {
+			case watch.Added, watch.Modified:
+				pod, ok := event.Object.(*corev1.Pod)
+				if !ok {
+					continue
+				}
+
+				if isPodReady(pod) {
+					return nil
+				}
+			case watch.Error:
+				return fmt.Errorf("error watching pod: %v", event.Object)
+			}
+
+		case <-timeoutCh:
 			return fmt.Errorf("timeout waiting for pods to be ready after %v", timeout)
 		}
-
-		// Check origin cluster pods
-		pods, _ := c.Clientset.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
-			LabelSelector: labelSelector,
-		})
-
-		// Check if pods exist and are running
-		podReady := isPodRunning(pods)
-
-		if podReady {
-			return nil
-		}
-
-		// Wait before next check
-		time.Sleep(5 * time.Second)
 	}
 }
 
-func isPodRunning(pods *corev1.PodList) bool {
-	if len(pods.Items) == 0 {
+func isPodReady(pod *corev1.Pod) bool {
+	if pod.Status.Phase != corev1.PodRunning {
 		return false
 	}
 
-	for _, pod := range pods.Items {
-		if pod.Status.Phase != corev1.PodRunning {
-			return false
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady {
+			if condition.Status != corev1.ConditionTrue {
+				return false
+			}
+			break
 		}
 	}
+
 	return true
 }
