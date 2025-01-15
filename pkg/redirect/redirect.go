@@ -20,8 +20,14 @@ func InitializeRequestForwarding(c kube.Clusters, logger *cli.Logger) {
 
 	// Create HTTP proxy resources in the origin cluster
 	l = logger.Log("Deploying proxy")
-	CreateHttpProxyResources(c.Origin, ip, l)
+	createHttpProxyDeployment(c.Origin, ip)
 	l.Success("Deployed proxy")
+}
+
+func EnableRequestForwarding(c kube.Clusters, logger *cli.Logger) {
+	l := logger.Log("Enable forwarding")
+	c.Origin.CreateResourcesFromURL(constants.HttpProxyIngressURL)
+	l.Success("Forwarding enabled")
 }
 
 func getLoadbalancerIP(c kube.Cluster) (string, error) {
@@ -45,10 +51,7 @@ func getLoadbalancerIP(c kube.Cluster) (string, error) {
 	return "", fmt.Errorf("No LoadBalancer IP found")
 }
 
-func CreateHttpProxyResources(c kube.Cluster, lbIpTarget string, logger *cli.Logger) {
-	// Create namespace
-	c.CreateNewNamespace("proxy")
-
+func createHttpProxyDeployment(c kube.Cluster, lbIpTarget string) {
 	// Create configmap
 	data := map[string]string{
 		"TARGET_URL": lbIpTarget,
@@ -57,7 +60,7 @@ func CreateHttpProxyResources(c kube.Cluster, lbIpTarget string, logger *cli.Log
 	c.CreateConfigmap("http-proxy-config", constants.HttpProxyNamespace, data)
 
 	// Create resources from yaml
-	c.CreateResourcesFromURL(constants.HttpProxyURL)
+	c.CreateResourcesFromURL(constants.HttpProxyDeploymentURL)
 }
 
 /*
