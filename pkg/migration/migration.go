@@ -43,6 +43,11 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 	connectivity.RunClusterConnectivityProbe(clusters, l)
 	l.Success("Connectivity check complete")
 
+	// Deploy reverse proxy
+	l = logger.Log("Deploy reverse proxy for request forwarding")
+	redirect.InitializeRequestForwarding(clusters, l)
+	l.Success("Reverse proxy deployed")
+
 	// Create secure connection between clusters via submariner
 	submariner.InstallSubmariner(clusters, logger)
 
@@ -71,8 +76,8 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 	clusters.CreateResourceDiff(kube.TraefikService)
 	l.Success("Resources migrated")
 
-	l = logger.Log("Redirect request from origin")
-	redirect.InitializeRequestForwarding(clusters, l)
+	l = logger.Log("Enable request forwarding from origin")
+	redirect.EnableRequestForwarding(clusters, l)
 	l.Success("Established request forwarding")
 
 	logger.Success("Migration complete")
