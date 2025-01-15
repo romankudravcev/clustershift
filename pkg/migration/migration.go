@@ -33,6 +33,11 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 		return
 	}
 	l.Success("Initialized kubernetes clients")
+
+	// Create clustershift namespace
+	clusters.Origin.CreateNewNamespace("clustershift")
+	clusters.Target.CreateNewNamespace("clustershift")
+
 	// Check connectivity between clusters
 	l = logger.Log("Checking connectivity between clusters")
 	connectivity.RunClusterConnectivityProbe(clusters, l)
