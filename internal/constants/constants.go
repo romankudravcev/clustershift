@@ -16,7 +16,7 @@ const (
 	// Proxy constants
 	HttpProxyDeploymentURL = "https://raw.githubusercontent.com/romankudravcev/reverse-proxy-http/main/Deployment.yml"
 	HttpProxyIngressURL    = "https://raw.githubusercontent.com/romankudravcev/reverse-proxy-http/main/Ingress.yml"
-	HttpProxyPort          = 8743
+	HttpProxyPort          = 8734
 	HttpProxyNamespace     = "clustershift"
 
 	// Submariner constants
