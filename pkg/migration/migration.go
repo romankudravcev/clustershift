@@ -55,6 +55,9 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 	clusters.CreateResourceDiff(kube.Namespace)
 	clusters.CreateResourceDiff(kube.ConfigMap)
 	clusters.CreateResourceDiff(kube.Secret)
+	clusters.CreateResourceDiff(kube.ServiceAccount)
+	clusters.CreateResourceDiff(kube.ClusterRole)
+	clusters.CreateResourceDiff(kube.ClusterRoleBind)
 	l.Success("Configuration resources migrated")
 
 	l = logger.Log("Migrate cnpg databases")
