@@ -23,6 +23,12 @@ func (c Cluster) FetchResources(resourceType ResourceType) (interface{}, error) 
 		return c.Clientset.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
 	case Service:
 		return c.Clientset.CoreV1().Services("").List(context.TODO(), metav1.ListOptions{})
+	case ServiceAccount:
+		return c.Clientset.CoreV1().ServiceAccounts("").List(context.TODO(), metav1.ListOptions{})
+	case ClusterRole:
+		return c.Clientset.RbacV1().ClusterRoles().List(context.TODO(), metav1.ListOptions{})
+	case ClusterRoleBind:
+		return c.Clientset.RbacV1().ClusterRoleBindings().List(context.TODO(), metav1.ListOptions{})
 	case Middleware:
 		return c.TraefikClientset.TraefikV1alpha1().Middlewares("").List(context.TODO(), metav1.ListOptions{})
 	case IngressRoute:
@@ -53,6 +59,12 @@ func (c Cluster) FetchResource(resourceType ResourceType, name string, namespace
 		return c.Clientset.CoreV1().Namespaces().Get(context.TODO(), name, metav1.GetOptions{})
 	case Service:
 		return c.Clientset.CoreV1().Services(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	case ServiceAccount:
+		return c.Clientset.CoreV1().ServiceAccounts(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	case ClusterRole:
+		return c.Clientset.RbacV1().ClusterRoles().Get(context.TODO(), name, metav1.GetOptions{})
+	case ClusterRoleBind:
+		return c.Clientset.RbacV1().ClusterRoleBindings().Get(context.TODO(), name, metav1.GetOptions{})
 	case Middleware:
 		return c.TraefikClientset.TraefikV1alpha1().Middlewares(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	case IngressRoute:
@@ -70,46 +82,46 @@ func (c Cluster) FetchResource(resourceType ResourceType, name string, namespace
 
 // FetchCustomResources fetches all custom resources of a specific type across all namespaces
 func (c Cluster) FetchCustomResources(group, version, resource string) ([]map[string]interface{}, error) {
-    // Define the GVR (GroupVersionResource)
-    gvr := schema.GroupVersionResource{
-        Group:    group,
-        Version:  version,
-        Resource: resource,
-    }
+	// Define the GVR (GroupVersionResource)
+	gvr := schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: resource,
+	}
 
-    // List the custom resources
-    list, err := c.DynamicClientset.Resource(gvr).
-        Namespace("").  // empty namespace means all namespaces
-        List(context.TODO(), metav1.ListOptions{})
-    if err != nil {
-        return nil, err
-    }
+	// List the custom resources
+	list, err := c.DynamicClientset.Resource(gvr).
+		Namespace(""). // empty namespace means all namespaces
+		List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
 
-    // Convert to a slice of maps for generic handling
-    var resources []map[string]interface{}
-    for _, item := range list.Items {
-        resources = append(resources, item.Object)
-    }
+	// Convert to a slice of maps for generic handling
+	var resources []map[string]interface{}
+	for _, item := range list.Items {
+		resources = append(resources, item.Object)
+	}
 
-    return resources, nil
+	return resources, nil
 }
 
 // FetchCustomResource fetches a single custom resource by name and namespace
 func (c Cluster) FetchCustomResource(group, version, resource, namespace, name string) (map[string]interface{}, error) {
-    // Define the GVR (GroupVersionResource)
-    gvr := schema.GroupVersionResource{
-        Group:    group,
-        Version:  version,
-        Resource: resource,
-    }
+	// Define the GVR (GroupVersionResource)
+	gvr := schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: resource,
+	}
 
-    // Get the specific custom resource
-    obj, err := c.DynamicClientset.Resource(gvr).
-        Namespace(namespace).
-        Get(context.TODO(), name, metav1.GetOptions{})
-    if err != nil {
-        return nil, err
-    }
+	// Get the specific custom resource
+	obj, err := c.DynamicClientset.Resource(gvr).
+		Namespace(namespace).
+		Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
 
-    return obj.Object, nil
+	return obj.Object, nil
 }

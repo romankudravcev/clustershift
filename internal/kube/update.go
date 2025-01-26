@@ -9,6 +9,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -34,6 +35,15 @@ func (c Cluster) UpdateResource(resourceType ResourceType, name, namespace strin
 		return err
 	case Service:
 		_, err := c.Clientset.CoreV1().Services(namespace).Update(context.TODO(), resource.(*corev1.Service), metav1.UpdateOptions{})
+		return err
+	case ServiceAccount:
+		_, err := c.Clientset.CoreV1().ServiceAccounts(namespace).Update(context.TODO(), resource.(*corev1.ServiceAccount), metav1.UpdateOptions{})
+		return err
+	case ClusterRole:
+		_, err := c.Clientset.RbacV1().ClusterRoles().Update(context.TODO(), resource.(*rbacv1.ClusterRole), metav1.UpdateOptions{})
+		return err
+	case ClusterRoleBind:
+		_, err := c.Clientset.RbacV1().ClusterRoleBindings().Update(context.TODO(), resource.(*rbacv1.ClusterRoleBinding), metav1.UpdateOptions{})
 		return err
 	case Middleware:
 		_, err := c.TraefikClientset.TraefikV1alpha1().Middlewares(namespace).Update(context.TODO(), resource.(*traefikv1alpha1.Middleware), metav1.UpdateOptions{})
