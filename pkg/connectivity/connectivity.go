@@ -171,22 +171,30 @@ func getClusterIP(client *kubernetes.Clientset) ([]string, error) {
 		return ips, fmt.Errorf("no nodes found in the cluster")
 	}
 
-	// Get the first node's external IP
-	for _, addr := range nodes.Items[0].Status.Addresses {
-		if addr.Type == corev1.NodeExternalIP {
-			ips = append(ips, addr.Address)
-		}
-	}
+	// Iterate through all nodes and check for master nodes
+	for _, node := range nodes.Items {
+		// Check if the node has the master label
+		if val, exists := node.Labels["node-role.kubernetes.io/master"]; exists && val == "true" {
+			// Get external IP first
+			for _, addr := range node.Status.Addresses {
+				if addr.Type == corev1.NodeExternalIP {
+					ips = append(ips, addr.Address)
+				}
+			}
 
-	// Fallback to internal IP if external IP is not available
-	for _, addr := range nodes.Items[0].Status.Addresses {
-		if addr.Type == corev1.NodeInternalIP {
-			ips = append(ips, addr.Address)
+			// Fallback to internal IP if external IP is not available
+			if len(ips) == 0 {
+				for _, addr := range node.Status.Addresses {
+					if addr.Type == corev1.NodeInternalIP {
+						ips = append(ips, addr.Address)
+					}
+				}
+			}
 		}
 	}
 
 	if len(ips) == 0 {
-		return ips, fmt.Errorf("no suitable IP address found for the cluster")
+		return ips, fmt.Errorf("no suitable IP address found for master nodes")
 	}
 
 	return ips, nil
