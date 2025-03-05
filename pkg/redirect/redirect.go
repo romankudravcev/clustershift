@@ -1,33 +1,33 @@
 package redirect
 
 import (
-	"clustershift/internal/cli"
 	"clustershift/internal/constants"
 	"clustershift/internal/exit"
 	"clustershift/internal/kube"
+	"clustershift/internal/logger"
 	"fmt"
 	"strconv"
 
 	v1 "k8s.io/api/core/v1"
 )
 
-func InitializeRequestForwarding(c kube.Clusters, logger *cli.Logger) {
+func InitializeRequestForwarding(c kube.Clusters) {
 	// Get the Loadbalancer IP of the target cluster
-	l := logger.Log("Fetching loadbalancer IP")
+	logger.Info("Fetching loadbalancer IP")
 	ip, err := getLoadbalancerIP(c.Target)
 	exit.OnErrorWithMessage(err, "Failed to get loadbalancer ip")
-	l.Success(fmt.Sprintf("Fetched loadbalancer IP: %s", ip))
+	logger.Info(fmt.Sprintf("Fetched loadbalancer IP: %s", ip))
 
 	// Create HTTP proxy resources in the origin cluster
-	l = logger.Log("Deploying proxy")
+	logger.Info("Deploying proxy")
 	createHttpProxyDeployment(c.Origin, ip)
-	l.Success("Deployed proxy")
+	logger.Info("Deployed proxy")
 }
 
-func EnableRequestForwarding(c kube.Clusters, logger *cli.Logger) {
-	l := logger.Log("Enable forwarding")
+func EnableRequestForwarding(c kube.Clusters) {
+	logger.Info("Enable forwarding")
 	c.Origin.CreateResourcesFromURL(constants.HttpProxyIngressURL)
-	l.Success("Forwarding enabled")
+	logger.Info("Forwarding enabled")
 }
 
 func getLoadbalancerIP(c kube.Cluster) (string, error) {
@@ -44,7 +44,7 @@ func getLoadbalancerIP(c kube.Cluster) (string, error) {
 	for _, service := range serviceList.Items {
 		if service.Status.LoadBalancer.Ingress != nil && len(service.Status.LoadBalancer.Ingress) > 0 {
 			ip := service.Status.LoadBalancer.Ingress[0].IP
-			cli.LogToFile(fmt.Sprintf("Service: %s IP: %s", service.ObjectMeta.Name, ip))
+			logger.Debug(fmt.Sprintf("Service: %s IP: %s", service.ObjectMeta.Name, ip))
 			return ip, nil
 		}
 	}

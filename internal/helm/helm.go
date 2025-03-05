@@ -1,7 +1,7 @@
 package helm
 
 import (
-	"clustershift/internal/cli"
+	"clustershift/internal/logger"
 	"context"
 	"fmt"
 	"os"
@@ -30,7 +30,7 @@ func GetHelmClient(h HelmClientOptions) helmclient.Client {
 	helmClient, err := helmclient.NewClientFromKubeConf(opt)
 
 	if err != nil {
-		cli.LogToFile(fmt.Sprintf("Failed to initialize Helm Client: %v", err))
+		logger.Debug(fmt.Sprintf("Failed to initialize Helm Client: %v", err))
 		return nil
 	}
 	return helmClient
@@ -44,7 +44,7 @@ func HelmAddandInstallChart(h helmclient.Client, c ChartOptions) {
 
 	// Add the chart repository
 	if err := h.AddOrUpdateChartRepo(chartRepo); err != nil {
-		cli.LogToFile(fmt.Sprintf("Error adding or updating chart repo: %v", err))
+		logger.Debug(fmt.Sprintf("Error adding or updating chart repo: %v", err))
 	}
 
 	// Define the chart to be installed
@@ -62,6 +62,6 @@ func HelmAddandInstallChart(h helmclient.Client, c ChartOptions) {
 
 	// Install the chart
 	if _, err := h.InstallOrUpgradeChart(context.Background(), &chartSpec, nil); err != nil {
-		cli.LogToFile(fmt.Sprintf("Error installing chart: %v", err))
+		logger.Debug(fmt.Sprintf("Error installing chart: %v", err))
 	}
 }

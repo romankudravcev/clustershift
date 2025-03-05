@@ -169,13 +169,13 @@ func (l *Logger) LogInfo(message string) {
 }
 
 // LogWarning logs a warning-level message
-func (l *Logger) LogWarning(message string) {
-	l.log(WARNING, WarningStyle, message)
+func (l *Logger) LogWarning(message string, error error) {
+	l.log(WARNING, WarningStyle, fmt.Sprintf("%s: %v", message, error))
 }
 
 // LogError logs an error-level message
-func (l *Logger) LogError(message string) {
-	l.log(ERROR, ErrorStyle, message)
+func (l *Logger) LogError(message string, error error) {
+	l.log(ERROR, ErrorStyle, fmt.Sprintf("%s: %v", message, error))
 }
 
 // EnsureLogger initializes the global logger if not already initialized
@@ -244,23 +244,23 @@ func Info(message string) {
 }
 
 // Warning logs a warning-level message using the global logger
-func Warning(message string) {
+func Warning(message string, error error) {
 	logger, err := GetLogger()
 	if err != nil {
 		fmt.Printf("Failed to get logger: %v\n", err)
 		return
 	}
-	logger.LogWarning(message)
+	logger.LogWarning(message, error)
 }
 
 // Error logs an error-level message using the global logger
-func Error(message string) {
+func Error(message string, error error) {
 	logger, err := GetLogger()
 	if err != nil {
 		fmt.Printf("Failed to get logger: %v\n", err)
 		return
 	}
-	logger.LogError(message)
+	logger.LogError(message, error)
 }
 
 // Close releases resources associated with the global logger

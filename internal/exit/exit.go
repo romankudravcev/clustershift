@@ -13,7 +13,7 @@ func OnError(err error) {
 
 func OnErrorWithMessage(err error, message string) {
 	if err != nil {
-		logger.Error(message + ": " + err.Error())
+		logger.Error(message, err)
 		os.Exit(1)
 	}
 }

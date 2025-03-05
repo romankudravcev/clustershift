@@ -1,10 +1,10 @@
 package cnpg
 
 import (
-	"clustershift/internal/cli"
 	"clustershift/internal/constants"
 	"clustershift/internal/exit"
 	"clustershift/internal/kube"
+	"clustershift/internal/logger"
 	"clustershift/pkg/submariner"
 	"encoding/json"
 	"fmt"
@@ -15,10 +15,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func InstallOperator(c kube.Cluster, logger *cli.Logger) {
-	l := logger.Log("Installing cloud native-pg operator")
+func InstallOperator(c kube.Cluster) {
+	logger.Info("Installing cloud native-pg operator")
 	exit.OnErrorWithMessage(c.CreateResourcesFromURL(constants.CNPGOperatorURL), "failed installing cloud native-pg operator")
-	l.Success("Installed cloud native-pg operator")
+	logger.Info("Installed cloud native-pg operator")
 }
 
 func ConvertToCluster(data map[string]interface{}) (*apiv1.Cluster, error) {
@@ -93,26 +93,26 @@ func addRWServiceToYaml(c kube.Cluster, resources []map[string]interface{}) erro
 	return nil
 }
 
-func AddClustersetDNS(c kube.Cluster, logger *cli.Logger) {
-	l := logger.Log("Adding submariner clusterset DNS")
+func AddClustersetDNS(c kube.Cluster) {
+	logger.Info("Adding submariner clusterset DNS")
 
 	// Fetch all cnpg clusters
-	l1 := l.Log("fetching cnpg clusters")
+	logger.Info("fetching cnpg clusters")
 	resources, err := c.FetchCustomResources(
 		"postgresql.cnpg.io",
 		"v1",
 		"clusters",
 	)
 	exit.OnErrorWithMessage(err, "Error fetching custom resources")
-	l1.Success("Fetched clusters")
+	logger.Info("Fetched clusters")
 
 	// Add clusterset DNS to each cluster
-	l1 = l.Log("Updating cluster resources")
+	logger.Info("Updating cluster resources")
 	err = addRWServiceToYaml(c, resources)
 	exit.OnErrorWithMessage(err, "Error updating cluster resources")
-	l1.Success("Updated cluster resources")
+	logger.Info("Updated cluster resources")
 
-	l.Success("Added submariner clusterset DNS")
+	logger.Info("Added submariner clusterset DNS")
 }
 
 func createReplicaCluster(originCluster *apiv1.Cluster) (*apiv1.Cluster, error) {
@@ -177,20 +177,20 @@ func createReplicaCluster(originCluster *apiv1.Cluster) (*apiv1.Cluster, error) 
 	return replicaCluster, nil
 }
 
-func CreateReplicaClusters(c kube.Clusters, logger *cli.Logger) {
-	l := logger.Log("Creating replica cluster")
+func CreateReplicaClusters(c kube.Clusters) {
+	logger.Info("Creating replica cluster")
 
 	// Fetch cnpg clusters from origin
-	l1 := l.Log("Fetching origin cnpg clusters")
+	logger.Info("Fetching origin cnpg clusters")
 	resources, err := c.Origin.FetchCustomResources(
 		"postgresql.cnpg.io",
 		"v1",
 		"clusters",
 	)
 	exit.OnErrorWithMessage(err, "Error fetching custom resources")
-	l1.Success("Fetched origin clusters")
+	logger.Info("Fetched origin clusters")
 
-	l1 = l.Log("Creating replica cluster from origin")
+	logger.Info("Creating replica cluster from origin")
 	for _, resource := range resources {
 		// Convert origin cluster to API object
 		originCluster, err := ConvertToCluster(resource)
@@ -200,58 +200,58 @@ func CreateReplicaClusters(c kube.Clusters, logger *cli.Logger) {
 		replicaCluster, err := createReplicaCluster(originCluster)
 		exit.OnErrorWithMessage(err, "Error creating replica cluster")
 
-		cli.LogToFile(fmt.Sprintf("%v", replicaCluster))
+		logger.Debug(fmt.Sprintf("%v", replicaCluster))
 		// Convert replica cluster to data
 		replicaClusterData, err := ConvertFromCluster(replicaCluster)
 		exit.OnErrorWithMessage(err, "Error converting replica cluster")
 
 		// Create replica cluster
-		err = c.Target.CreateCustomResource(originCluster.Namespace, replicaClusterData, l1)
+		err = c.Target.CreateCustomResource(originCluster.Namespace, replicaClusterData)
 		exit.OnErrorWithMessage(err, "Error applying replica cluster")
 
 		// Wait for replica cluster to be ready
 		err = kube.WaitForCNPGClusterReady(c.Target.DynamicClientset, originCluster.Name, originCluster.Namespace, 1*time.Hour)
 		exit.OnErrorWithMessage(err, "Timeout while waiting for replica cluster bootstrap")
 	}
-	l1.Success("Created replica clusters")
+	logger.Info("Created replica clusters")
 }
 
-func ExportRWServices(c kube.Cluster, logger *cli.Logger) {
-	l := logger.Log("Exporting cnpg rw services")
+func ExportRWServices(c kube.Cluster) {
+	logger.Info("Exporting cnpg rw services")
 
 	// Fetch all cnpg clusters
-	l1 := l.Log("fetching cnpg clusters")
+	logger.Info("fetching cnpg clusters")
 	resources, err := c.FetchCustomResources(
 		"postgresql.cnpg.io",
 		"v1",
 		"clusters",
 	)
 	exit.OnErrorWithMessage(err, "Error fetching custom resources")
-	l1.Success("Fetched clusters")
+	logger.Info("Fetched clusters")
 
 	// Export services
 	for _, resource := range resources {
 		clusterName := resource["metadata"].(map[string]interface{})["name"].(string)
 		namespace := resource["metadata"].(map[string]interface{})["namespace"].(string)
 		serviceName := fmt.Sprintf("%s-rw", clusterName)
-		submariner.Export(c, namespace, serviceName, "", l)
+		submariner.Export(c, namespace, serviceName, "")
 	}
 
-	l.Success("Service export successful")
+	logger.Info("Service export successful")
 }
 
-func DemoteOriginCluster(c kube.Cluster, logger *cli.Logger) {
-	l := logger.Log("Demote cnpg clusters")
+func DemoteOriginCluster(c kube.Cluster) {
+	logger.Info("Demote cnpg clusters")
 
 	// Fetch all cnpg clusters
-	l1 := l.Log("fetching cnpg clusters")
+	logger.Info("fetching cnpg clusters")
 	resources, err := c.FetchCustomResources(
 		"postgresql.cnpg.io",
 		"v1",
 		"clusters",
 	)
 	exit.OnErrorWithMessage(err, "Error fetching custom resources")
-	l1.Success("Fetched clusters")
+	logger.Info("Fetched clusters")
 
 	for _, resource := range resources {
 		cluster, err := ConvertToCluster(resource)
@@ -301,23 +301,23 @@ func DemoteOriginCluster(c kube.Cluster, logger *cli.Logger) {
 		err = c.UpdateCustomResource(cluster.Namespace, updatedObj)
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Error updating cluster %s in namespace %s", cluster.Name, cluster.Namespace))
 
-		l1.Success(fmt.Sprintf("Successfully updated cluster %s in namespace %s", cluster.Name, cluster.Namespace))
+		logger.Info(fmt.Sprintf("Successfully updated cluster %s in namespace %s", cluster.Name, cluster.Namespace))
 	}
-	l.Success("Completed demoting clusters")
+	logger.Info("Completed demoting clusters")
 }
 
-func DisableReplication(c kube.Cluster, logger *cli.Logger) {
-	l := logger.Log("Demote cnpg clusters")
+func DisableReplication(c kube.Cluster) {
+	logger.Info("Demote cnpg clusters")
 
 	// Fetch all cnpg clusters
-	l1 := l.Log("fetching cnpg clusters")
+	logger.Info("fetching cnpg clusters")
 	resources, err := c.FetchCustomResources(
 		"postgresql.cnpg.io",
 		"v1",
 		"clusters",
 	)
 	exit.OnErrorWithMessage(err, "Error fetching custom resources")
-	l1.Success("Fetched clusters")
+	logger.Info("Fetched clusters")
 
 	for _, resource := range resources {
 		cluster, err := ConvertToCluster(resource)
@@ -336,7 +336,7 @@ func DisableReplication(c kube.Cluster, logger *cli.Logger) {
 			exit.OnErrorWithMessage(err, fmt.Sprintf("Error updating cluster %s in namespace %s", cluster.Name, cluster.Namespace))
 		}
 
-		l1.Success(fmt.Sprintf("Successfully updated cluster %s in namespace %s", cluster.Name, cluster.Namespace))
+		logger.Info(fmt.Sprintf("Successfully updated cluster %s in namespace %s", cluster.Name, cluster.Namespace))
 	}
-	l.Success("Completed demoting clusters")
+	logger.Info("Completed demoting clusters")
 }
