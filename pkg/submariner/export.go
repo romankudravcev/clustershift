@@ -18,7 +18,7 @@ import (
 func Export(c kube.Cluster, namespace string, name string, useClustersetIP string, logger *cli.Logger) {
 	l := logger.Log("Checking for namespace")
 	_, err := c.Clientset.CoreV1().Services(namespace).Get(context.TODO(), name, metav1.GetOptions{})
-	exit.OnErrorWithMessage(l.Fail(fmt.Sprintf("Unable to find the Service %q in namespace %q", name, namespace), err))
+	exit.OnErrorWithMessage(err, fmt.Sprintf("Unable to find the Service %q in namespace %q", name, namespace))
 
 	l.Success("Namespace exists")
 
@@ -38,13 +38,13 @@ func Export(c kube.Cluster, namespace string, name string, useClustersetIP strin
 	// If user specified the use-clusterset-ip flag
 	if useClustersetIP != "" {
 		result, err := strconv.ParseBool(useClustersetIP)
-		exit.OnErrorWithMessage(l.Fail("use-clusterset-ip must be set to true/false: ", err))
+		exit.OnErrorWithMessage(err, "use-clusterset-ip must be set to true/false: ")
 
 		mcsServiceExport.SetAnnotations(map[string]string{lhconstants.UseClustersetIP: strconv.FormatBool(result)})
 	}
 
 	resourceServiceExport, err := convertToUnstructured(mcsServiceExport)
-	exit.OnErrorWithMessage(l.Fail("Failed to convert to Unstructured", err))
+	exit.OnErrorWithMessage(err, "Failed to convert to Unstructured")
 
 	cli.LogToFile(fmt.Sprintf("%v", resourceServiceExport))
 
@@ -53,7 +53,7 @@ func Export(c kube.Cluster, namespace string, name string, useClustersetIP strin
 		l.Success("Service already exported")
 		return
 	}
-	exit.OnErrorWithMessage(l.Fail("Failed to export service", err))
+	exit.OnErrorWithMessage(err, "Failed to export service")
 
 	l.Success("Service exported successfully")
 }

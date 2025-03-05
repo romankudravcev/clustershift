@@ -1,7 +1,7 @@
 package exit
 
 import (
-	"fmt"
+	"clustershift/internal/logger"
 	"os"
 )
 
@@ -11,11 +11,9 @@ func OnError(err error) {
 	}
 }
 
-func OnErrorWithMessage(err error) {
+func OnErrorWithMessage(err error, message string) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%v", err)
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "")
+		logger.Error(message + ": " + err.Error())
 		os.Exit(1)
 	}
 }
