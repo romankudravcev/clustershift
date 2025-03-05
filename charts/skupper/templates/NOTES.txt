@@ -1,0 +1,12 @@
+{{- if eq .Values.scope "cluster"}}
+===========================================================
+  Skupper chart is now installed in the cluster.
+  Skupper controller was deployed in the namespace "{{ .Release.Namespace }}".
+
+===========================================================
+{{- end }}
+{{- if eq .Values.scope "namespace"}}
+===========================================================
+  Skupper chart is now installed in your current namespace.
+===========================================================
+{{- end }}

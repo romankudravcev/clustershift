@@ -1,0 +1,7 @@
+controllerImage: quay.io/skupper/controller:v2-dev
+kubeAdaptorImage: quay.io/skupper/kube-adaptor:v2-dev
+routerImage: quay.io/skupper/skupper-router:main
+
+# available options: cluster, namespace
+scope: cluster
+
