@@ -1,9 +1,9 @@
 package submariner
 
 import (
-	"clustershift/internal/cli"
 	"clustershift/internal/exit"
 	"clustershift/internal/kube"
+	"clustershift/internal/logger"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,14 +15,14 @@ import (
 	mcsv1a1 "sigs.k8s.io/mcs-api/pkg/apis/v1alpha1"
 )
 
-func Export(c kube.Cluster, namespace string, name string, useClustersetIP string, logger *cli.Logger) {
-	l := logger.Log("Checking for namespace")
+func Export(c kube.Cluster, namespace string, name string, useClustersetIP string) {
+	logger.Info("Checking for namespace")
 	_, err := c.Clientset.CoreV1().Services(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	exit.OnErrorWithMessage(err, fmt.Sprintf("Unable to find the Service %q in namespace %q", name, namespace))
 
-	l.Success("Namespace exists")
+	logger.Info("Namespace exists")
 
-	l = logger.Log("Creating service export resource")
+	logger.Info("Creating service export resource")
 
 	mcsServiceExport := &mcsv1a1.ServiceExport{
 		TypeMeta: metav1.TypeMeta{
@@ -46,16 +46,16 @@ func Export(c kube.Cluster, namespace string, name string, useClustersetIP strin
 	resourceServiceExport, err := convertToUnstructured(mcsServiceExport)
 	exit.OnErrorWithMessage(err, "Failed to convert to Unstructured")
 
-	cli.LogToFile(fmt.Sprintf("%v", resourceServiceExport))
+	logger.Debug(fmt.Sprintf("%v", resourceServiceExport))
 
-	err = c.CreateCustomResource(namespace, resourceServiceExport, l)
+	err = c.CreateCustomResource(namespace, resourceServiceExport)
 	if k8serrors.IsAlreadyExists(err) {
-		l.Success("Service already exported")
+		logger.Info("Service already exported")
 		return
 	}
 	exit.OnErrorWithMessage(err, "Failed to export service")
 
-	l.Success("Service exported successfully")
+	logger.Info("Service exported successfully")
 }
 
 func convertToUnstructured(serviceExport *mcsv1a1.ServiceExport) (map[string]interface{}, error) {

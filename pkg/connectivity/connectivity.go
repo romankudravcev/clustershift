@@ -1,10 +1,10 @@
 package connectivity
 
 import (
-	"clustershift/internal/cli"
 	"clustershift/internal/constants"
 	"clustershift/internal/exit"
 	"clustershift/internal/kube"
+	"clustershift/internal/logger"
 	"context"
 	"fmt"
 	"strings"
@@ -16,16 +16,14 @@ import (
 )
 
 func DiagnoseConnection(kubeconfigOrigin string, kubeconfigTarget string) {
-	logger := cli.NewLogger("Running connectivity probe", nil)
-
 	clusters, err := kube.InitClients(kubeconfigOrigin, kubeconfigTarget)
 	exit.OnErrorWithMessage(err, "Error initializing kubernetes clients")
 
-	RunClusterConnectivityProbe(clusters, logger)
+	RunClusterConnectivityProbe(clusters)
 }
 
-func RunClusterConnectivityProbe(clusters kube.Clusters, logger *cli.Logger) {
-	l := logger.Log("Fetching cluster IPs")
+func RunClusterConnectivityProbe(clusters kube.Clusters) {
+	logger.Info("Fetching cluster IPs")
 
 	// Get IPs arrays
 	originClusterIPs, err := getClusterIP(clusters.Origin.Clientset)
@@ -34,15 +32,15 @@ func RunClusterConnectivityProbe(clusters kube.Clusters, logger *cli.Logger) {
 	targetClusterIPs, err := getClusterIP(clusters.Target.Clientset)
 	exit.OnErrorWithMessage(err, "Error getting target cluster IPs")
 
-	l.Success("Fetched cluster IPs")
+	logger.Info("Fetched cluster IPs")
 
 	// Try each combination of IPs
 	for _, originIP := range originClusterIPs {
 		for _, targetIP := range targetClusterIPs {
-			cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
-			l = logger.Log(fmt.Sprintf("Testing connectivity with Origin IP: %s, Target IP: %s", originIP, targetIP))
+			cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
+			logger.Info(fmt.Sprintf("Testing connectivity with Origin IP: %s, Target IP: %s", originIP, targetIP))
 
-			l1 := l.Log("Deploying probe resources")
+			logger.Debug("Deploying probe resources")
 			// Create namespace if it doesn't exist in both clusters
 			clusters.Origin.CreateNewNamespace(constants.ConnectivityProbeNamespace)
 			clusters.Target.CreateNewNamespace(constants.ConnectivityProbeNamespace)
@@ -71,22 +69,22 @@ func RunClusterConnectivityProbe(clusters kube.Clusters, logger *cli.Logger) {
 			// Create deployments
 			err = clusters.Origin.CreateResourcesFromURL(constants.ConnectivityProbeDeploymentURL)
 			if err != nil {
-				l1.Warning("Failed to create resources", err)
-				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
+				logger.Warning("Failed to create resources", err)
+				cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
 				continue
 			}
 
 			err = clusters.Target.CreateResourcesFromURL(constants.ConnectivityProbeDeploymentURL)
 			if err != nil {
-				l1.Warning("Failed to create resources", err)
-				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
+				logger.Warning("Failed to create resources", err)
+				cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
 				continue
 			}
 
-			l1.Success("Deployed probe resources")
+			logger.Info("Deployed probe resources")
 
 			// Check if the pods are running
-			l1 = l.Log("Waiting for pods to be ready")
+			logger.Info("Waiting for pods to be ready")
 			err = kube.WaitForPodsReady(
 				clusters.Origin,
 				constants.ConnectivityProbeLabelSelector,
@@ -94,8 +92,8 @@ func RunClusterConnectivityProbe(clusters kube.Clusters, logger *cli.Logger) {
 				90*time.Second,
 			)
 			if err != nil {
-				l1.Warning("Failed waiting for pods", err)
-				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
+				logger.Warning("Failed waiting for pods", err)
+				cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
 				continue
 			}
 			err = kube.WaitForPodsReady(
@@ -105,14 +103,14 @@ func RunClusterConnectivityProbe(clusters kube.Clusters, logger *cli.Logger) {
 				90*time.Second,
 			)
 			if err != nil {
-				l1.Warning("Failed waiting for pods", err)
-				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
+				logger.Warning("Failed waiting for pods", err)
+				cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
 				continue
 			}
-			l1.Success("Pods are ready")
+			logger.Info("Pods are ready")
 
 			// Check connectivity
-			l1 = l.Log("Checking connectivity between clusters")
+			logger.Info("Checking connectivity between clusters")
 
 			// Give pods a few seconds to start probing
 			time.Sleep(10 * time.Second)
@@ -120,38 +118,38 @@ func RunClusterConnectivityProbe(clusters kube.Clusters, logger *cli.Logger) {
 			// Check Origin -> Target connectivity
 			originSuccess, err := checkConnectivityProbeLogs(&clusters.Origin, constants.ConnectivityProbeDeploymentName, constants.ConnectivityProbeNamespace)
 			if err != nil {
-				l1.Warning("Failed to check origin cluster logs", err)
-				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
+				logger.Warning("Failed to check origin cluster logs", err)
+				cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
 				continue
 			}
 
 			// Check Target -> Origin connectivity
 			targetSuccess, err := checkConnectivityProbeLogs(&clusters.Target, constants.ConnectivityProbeDeploymentName, constants.ConnectivityProbeNamespace)
 			if err != nil {
-				l1.Warning("Failed to check target cluster logs", err)
-				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
+				logger.Warning("Failed to check target cluster logs", err)
+				cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
 				continue
 			}
 
 			if originSuccess && targetSuccess {
-				l1.Success(fmt.Sprintf("Connectivity check successful with Origin IP: %s, Target IP: %s - both clusters can reach each other", originIP, targetIP))
+				logger.Info(fmt.Sprintf("Connectivity check successful with Origin IP: %s, Target IP: %s - both clusters can reach each other", originIP, targetIP))
 			} else {
 				if !originSuccess {
 					err = fmt.Errorf("Origin cluster (%s) cannot reach target cluster (%s)", originIP, targetIP)
-					l1.Warning("Connectivity check failed", err)
+					logger.Warning("Connectivity check failed", err)
 				}
 				if !targetSuccess {
 					err = fmt.Errorf("Target cluster (%s) cannot reach origin cluster (%s)", targetIP, originIP)
-					l1.Warning("Connectivity check failed", err)
+					logger.Warning("Connectivity check failed", err)
 				}
 				err = fmt.Errorf("Connectivity check failed")
-				cleanupResources(&clusters, constants.ConnectivityProbeNamespace, l)
+				cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
 				continue
 			}
 
-			cleanupResources(&clusters, constants.ConnectivityProbeNamespace, logger)
-			l.Success("Connectivity test successful")
-			logger.Success("Connectivity probe complete")
+			cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
+			logger.Info("Connectivity test successful")
+			logger.Info("Connectivity probe complete")
 			return // Exit if connectivity check is successful
 		}
 	}
@@ -238,8 +236,8 @@ func checkConnectivityProbeLogs(cluster *kube.Cluster, name string, namespace st
 	return strings.Contains(string(logs), "Successfully connected to"), nil
 }
 
-func cleanupResources(clusters *kube.Clusters, namespace string, logger *cli.Logger) {
-	l := logger.Log("Cleaning up probe resources")
+func cleanupResources(clusters *kube.Clusters, namespace string) {
+	logger.Info("Cleaning up probe resources")
 
 	// Delete namespaces in both clusters
 	deletePolicy := metav1.DeletePropagationForeground
@@ -251,5 +249,5 @@ func cleanupResources(clusters *kube.Clusters, namespace string, logger *cli.Log
 	//exit.OnErrorWithMessage(l.Fail("Failed to cleanup origin cluster namespace", err))
 	clusters.Target.Clientset.CoreV1().Namespaces().Delete(context.TODO(), namespace, deleteOptions)
 	//exit.OnErrorWithMessage(l.Fail("Failed to cleanup target cluster namespace", err))
-	l.Success("Cleaned up probe resources")
+	logger.Info("Cleaned up probe resources")
 }

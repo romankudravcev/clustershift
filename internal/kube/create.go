@@ -2,7 +2,6 @@ package kube
 
 import (
 	"bytes"
-	"clustershift/internal/cli"
 	"context"
 	"fmt"
 	"io"
@@ -192,7 +191,7 @@ func (c Cluster) CreateResourcesFromURL(url string) error {
 	return nil
 }
 
-func (c Cluster) CreateCustomResource(namespace string, resource map[string]interface{}, logger *cli.Logger) error {
+func (c Cluster) CreateCustomResource(namespace string, resource map[string]interface{}) error {
 	apiVersion, ok := resource["apiVersion"].(string)
 	if !ok {
 		return fmt.Errorf("apiVersion not found or not a string")

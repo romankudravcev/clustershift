@@ -1,10 +1,10 @@
 package submariner
 
 import (
-	"clustershift/internal/cli"
 	"clustershift/internal/cluster"
 	"clustershift/internal/constants"
 	"clustershift/internal/helm"
+	"clustershift/internal/logger"
 	"fmt"
 )
 
@@ -19,7 +19,7 @@ func JoinCluster(c cluster.ClusterOptions, s SubmarinerJoinOptions) {
 	helmClient := helm.GetHelmClient(helmOptions)
 	values, err := GenerateJoinArgs(s)
 	if err != nil {
-		cli.LogToFile(fmt.Sprintf("Error generating joing args: %v", err))
+		logger.Debug(fmt.Sprintf("Error generating joing args: %v", err))
 	}
 
 	chartOptions := helm.ChartOptions{

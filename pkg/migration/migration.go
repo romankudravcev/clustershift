@@ -1,11 +1,11 @@
 package migration
 
 import (
-	"clustershift/internal/cli"
 	"clustershift/internal/constants"
 	"clustershift/internal/exit"
 	"clustershift/internal/kube"
 	"clustershift/internal/kubeconfig"
+	"clustershift/internal/logger"
 	"clustershift/pkg/connectivity"
 	cnpg "clustershift/pkg/database"
 	"clustershift/pkg/redirect"
@@ -15,10 +15,8 @@ import (
 )
 
 func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
-	logger := cli.NewLogger("Migrating cluster", nil)
-	cli.SetOGLogger(logger)
 	//TODO extract code
-	l := logger.Log("Initializing kubernetes clients")
+	logger.Info("Initializing kubernetes clients")
 	// Copy the kubeconfig files to a temporary directory and modify them
 	exit.OnErrorWithMessage(kubeconfig.ProcessKubeconfig(kubeconfigOrigin, "origin"), "Processing Kubeconfig failed")
 	exit.OnErrorWithMessage(kubeconfig.ProcessKubeconfig(kubeconfigTarget, "target"), "Processing Kubeconfig failed")
@@ -32,44 +30,44 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 		fmt.Println(err)
 		return
 	}
-	l.Success("Initialized kubernetes clients")
+	logger.Info("Initialized kubernetes clients")
 
 	// Create clustershift namespace
 	clusters.Origin.CreateNewNamespace("clustershift")
 	clusters.Target.CreateNewNamespace("clustershift")
 
 	// Check connectivity between clusters
-	l = logger.Log("Checking connectivity between clusters")
-	connectivity.RunClusterConnectivityProbe(clusters, l)
-	l.Success("Connectivity check complete")
+	logger.Info("Checking connectivity between clusters")
+	connectivity.RunClusterConnectivityProbe(clusters)
+	logger.Info("Connectivity check complete")
 
 	// Deploy reverse proxy
-	l = logger.Log("Deploy reverse proxy for request forwarding")
-	redirect.InitializeRequestForwarding(clusters, l)
-	l.Success("Reverse proxy deployed")
+	logger.Info("Deploy reverse proxy for request forwarding")
+	redirect.InitializeRequestForwarding(clusters)
+	logger.Info("Reverse proxy deployed")
 
 	// Create secure connection between clusters via submariner
-	submariner.InstallSubmariner(clusters, logger)
+	submariner.InstallSubmariner(clusters)
 
-	l = logger.Log("Migrating configuration resources")
+	logger.Info("Migrating configuration resources")
 	clusters.CreateResourceDiff(kube.Namespace)
 	clusters.CreateResourceDiff(kube.ConfigMap)
 	clusters.CreateResourceDiff(kube.Secret)
 	clusters.CreateResourceDiff(kube.ServiceAccount)
 	clusters.CreateResourceDiff(kube.ClusterRole)
 	clusters.CreateResourceDiff(kube.ClusterRoleBind)
-	l.Success("Configuration resources migrated")
+	logger.Info("Configuration resources migrated")
 
-	l = logger.Log("Migrate cnpg databases")
-	cnpg.InstallOperator(clusters.Target, l)
+	logger.Info("Migrate cnpg databases")
+	cnpg.InstallOperator(clusters.Target)
 	kube.WaitForPodsReady(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
-	cnpg.AddClustersetDNS(clusters.Origin, l)
-	cnpg.ExportRWServices(clusters.Origin, l)
-	cnpg.CreateReplicaClusters(clusters, l)
+	cnpg.AddClustersetDNS(clusters.Origin)
+	cnpg.ExportRWServices(clusters.Origin)
+	cnpg.CreateReplicaClusters(clusters)
 
-	l.Success("cnpg databases migrated")
+	logger.Info("cnpg databases migrated")
 
-	l = logger.Log("Migrating resources")
+	logger.Info("Migrating resources")
 	clusters.CreateResourceDiff(kube.Deployment)
 	clusters.CreateResourceDiff(kube.Ingress)
 	clusters.CreateResourceDiff(kube.Service)
@@ -78,15 +76,15 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 	clusters.CreateResourceDiff(kube.IngressRouteUDP)
 	clusters.CreateResourceDiff(kube.Middleware)
 	clusters.CreateResourceDiff(kube.TraefikService)
-	l.Success("Resources migrated")
+	logger.Info("Resources migrated")
 
 	// Demote and promote databases
-	cnpg.DemoteOriginCluster(clusters.Origin, logger)
-	cnpg.DisableReplication(clusters.Target, logger)
+	cnpg.DemoteOriginCluster(clusters.Origin)
+	cnpg.DisableReplication(clusters.Target)
 
-	l = logger.Log("Enable request forwarding from origin")
-	redirect.EnableRequestForwarding(clusters, l)
-	l.Success("Established request forwarding")
+	logger.Info("Enable request forwarding from origin")
+	redirect.EnableRequestForwarding(clusters)
+	logger.Info("Established request forwarding")
 
-	logger.Success("Migration complete")
+	logger.Info("Migration complete")
 }

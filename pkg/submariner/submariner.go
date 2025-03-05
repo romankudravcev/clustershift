@@ -1,38 +1,38 @@
 package submariner
 
 import (
-	"clustershift/internal/cli"
 	"clustershift/internal/constants"
 	"clustershift/internal/decoder"
 	"clustershift/internal/kube"
+	"clustershift/internal/logger"
 	"encoding/base64"
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 )
 
-func InstallSubmariner(c kube.Clusters, logger *cli.Logger) {
-	log := logger.Log("Installing Submariner")
-	defer log.Success("Submariner installed")
+func InstallSubmariner(c kube.Clusters) {
+	logger.Info("Installing Submariner")
+	defer logger.Info("Submariner installed")
 
 	// Gather necessary information
 	cidrs := BuildCIDRs(c)
 
-	l := log.Log("Labeling gateway nodes")
+	logger.Info("Labeling gateway nodes")
 	// Label one master node in each cluster as a gateway node
 	LabelGatewayNode(c.Origin)
 	LabelGatewayNode(c.Target)
-	l.Success("Labeled gateway nodes")
+	logger.Info("Labeled gateway nodes")
 
 	// Deploy broker
-	l = log.Log("Deploying broker")
+	logger.Info("Deploying broker")
 	DeployBroker(*c.Origin.ClusterOptions)
-	l.Success("Deployed broker")
+	logger.Info("Deployed broker")
 
 	psk := GenerateRandomString(64)
 	secretInterface, err := c.Origin.FetchResource(kube.Secret, constants.SubmarinerBrokerClientToken, constants.SubmarinerBrokerNamespace)
 	if err != nil {
-		cli.LogToFile(fmt.Sprintf("Error fetching secret: %v", err))
+		logger.Debug(fmt.Sprintf("Error fetching secret: %v", err))
 		panic(err)
 	}
 	secret := secretInterface.(*v1.Secret)
@@ -62,12 +62,12 @@ func InstallSubmariner(c kube.Clusters, logger *cli.Logger) {
 	}
 
 	// Deploy operator
-	l = log.Log("Joining origin cluster")
+	logger.Info("Joining origin cluster")
 	JoinCluster(*c.Origin.ClusterOptions, originJoinOptions)
-	l.Success("Joined origin cluster")
-	l = log.Log("Joining target cluster")
+	logger.Info("Joined origin cluster")
+	logger.Info("Joining target cluster")
 	JoinCluster(*c.Target.ClusterOptions, targetJoinOptions)
-	l.Success("Joined target cluster")
+	logger.Info("Joined target cluster")
 }
 
 func LabelGatewayNode(c kube.Cluster) {
