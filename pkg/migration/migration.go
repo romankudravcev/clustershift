@@ -20,8 +20,8 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 	//TODO extract code
 	l := logger.Log("Initializing kubernetes clients")
 	// Copy the kubeconfig files to a temporary directory and modify them
-	exit.OnErrorWithMessage(l.Fail("Processing Kubeconfig failed", kubeconfig.ProcessKubeconfig(kubeconfigOrigin, "origin")))
-	exit.OnErrorWithMessage(l.Fail("Processing Kubeconfig failed", kubeconfig.ProcessKubeconfig(kubeconfigTarget, "target")))
+	exit.OnErrorWithMessage(kubeconfig.ProcessKubeconfig(kubeconfigOrigin, "origin"), "Processing Kubeconfig failed")
+	exit.OnErrorWithMessage(kubeconfig.ProcessKubeconfig(kubeconfigTarget, "target"), "Processing Kubeconfig failed")
 
 	// get new kubeconfig paths
 	kubeconfigOrigin = "tmp/origin_kubeconfig.yaml"

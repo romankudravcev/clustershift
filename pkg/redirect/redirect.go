@@ -15,7 +15,7 @@ func InitializeRequestForwarding(c kube.Clusters, logger *cli.Logger) {
 	// Get the Loadbalancer IP of the target cluster
 	l := logger.Log("Fetching loadbalancer IP")
 	ip, err := getLoadbalancerIP(c.Target)
-	exit.OnErrorWithMessage(l.Fail("Failed to get loadbalancer ip", err))
+	exit.OnErrorWithMessage(err, "Failed to get loadbalancer ip")
 	l.Success(fmt.Sprintf("Fetched loadbalancer IP: %s", ip))
 
 	// Create HTTP proxy resources in the origin cluster

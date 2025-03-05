@@ -19,7 +19,7 @@ func DiagnoseConnection(kubeconfigOrigin string, kubeconfigTarget string) {
 	logger := cli.NewLogger("Running connectivity probe", nil)
 
 	clusters, err := kube.InitClients(kubeconfigOrigin, kubeconfigTarget)
-	exit.OnErrorWithMessage(logger.Fail("Error initializing kubernetes clients", err))
+	exit.OnErrorWithMessage(err, "Error initializing kubernetes clients")
 
 	RunClusterConnectivityProbe(clusters, logger)
 }
@@ -29,10 +29,10 @@ func RunClusterConnectivityProbe(clusters kube.Clusters, logger *cli.Logger) {
 
 	// Get IPs arrays
 	originClusterIPs, err := getClusterIP(clusters.Origin.Clientset)
-	exit.OnErrorWithMessage(l.Fail("Error getting origin cluster IPs", err))
+	exit.OnErrorWithMessage(err, "Error getting origin cluster IPs")
 
 	targetClusterIPs, err := getClusterIP(clusters.Target.Clientset)
-	exit.OnErrorWithMessage(l.Fail("Error getting target cluster IPs", err))
+	exit.OnErrorWithMessage(err, "Error getting target cluster IPs")
 
 	l.Success("Fetched cluster IPs")
 
@@ -156,7 +156,7 @@ func RunClusterConnectivityProbe(clusters kube.Clusters, logger *cli.Logger) {
 		}
 	}
 	err = fmt.Errorf("All IP combinations failed connectivity check")
-	exit.OnErrorWithMessage(l.Fail("Connectivity check failed", err))
+	exit.OnErrorWithMessage(err, "Connectivity check failed")
 }
 
 func getClusterIP(client *kubernetes.Clientset) ([]string, error) {

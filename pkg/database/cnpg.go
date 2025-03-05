@@ -16,10 +16,9 @@ import (
 )
 
 func InstallOperator(c kube.Cluster, logger *cli.Logger) {
-	l := logger.Log("Installing cloudnative-pg operator")
-	err := c.CreateResourcesFromURL(constants.CNPGOperatorURL)
-	exit.OnErrorWithMessage(l.Fail("failed installing cloudnative-pg operator", err))
-	l.Success("Installed cloudnative-pg operator")
+	l := logger.Log("Installing cloud native-pg operator")
+	exit.OnErrorWithMessage(c.CreateResourcesFromURL(constants.CNPGOperatorURL), "failed installing cloud native-pg operator")
+	l.Success("Installed cloud native-pg operator")
 }
 
 func ConvertToCluster(data map[string]interface{}) (*apiv1.Cluster, error) {
@@ -104,13 +103,13 @@ func AddClustersetDNS(c kube.Cluster, logger *cli.Logger) {
 		"v1",
 		"clusters",
 	)
-	exit.OnErrorWithMessage(l1.Fail("Error fetching custom resources", err))
+	exit.OnErrorWithMessage(err, "Error fetching custom resources")
 	l1.Success("Fetched clusters")
 
 	// Add clusterset DNS to each cluster
 	l1 = l.Log("Updating cluster resources")
 	err = addRWServiceToYaml(c, resources)
-	exit.OnErrorWithMessage(l1.Fail("Error updating cluster resources", err))
+	exit.OnErrorWithMessage(err, "Error updating cluster resources")
 	l1.Success("Updated cluster resources")
 
 	l.Success("Added submariner clusterset DNS")
@@ -188,31 +187,31 @@ func CreateReplicaClusters(c kube.Clusters, logger *cli.Logger) {
 		"v1",
 		"clusters",
 	)
-	exit.OnErrorWithMessage(l1.Fail("Error fetching custom resources", err))
+	exit.OnErrorWithMessage(err, "Error fetching custom resources")
 	l1.Success("Fetched origin clusters")
 
 	l1 = l.Log("Creating replica cluster from origin")
 	for _, resource := range resources {
 		// Convert origin cluster to API object
 		originCluster, err := ConvertToCluster(resource)
-		exit.OnErrorWithMessage(l1.Fail("Error converting origin cluster", err))
+		exit.OnErrorWithMessage(err, "Error converting origin cluster")
 
 		// Create replica cluster from origin
 		replicaCluster, err := createReplicaCluster(originCluster)
-		exit.OnErrorWithMessage(l1.Fail("Error creating replica cluster", err))
+		exit.OnErrorWithMessage(err, "Error creating replica cluster")
 
 		cli.LogToFile(fmt.Sprintf("%v", replicaCluster))
 		// Convert replica cluster to data
 		replicaClusterData, err := ConvertFromCluster(replicaCluster)
-		exit.OnErrorWithMessage(l1.Fail("Error converting replica cluster", err))
+		exit.OnErrorWithMessage(err, "Error converting replica cluster")
 
 		// Create replica cluster
 		err = c.Target.CreateCustomResource(originCluster.Namespace, replicaClusterData, l1)
-		exit.OnErrorWithMessage(l1.Fail("Error applying replica cluster", err))
+		exit.OnErrorWithMessage(err, "Error applying replica cluster")
 
 		// Wait for replica cluster to be ready
 		err = kube.WaitForCNPGClusterReady(c.Target.DynamicClientset, originCluster.Name, originCluster.Namespace, 1*time.Hour)
-		exit.OnErrorWithMessage(l1.Fail("Timeout while waiting for replica cluster bootstrap", err))
+		exit.OnErrorWithMessage(err, "Timeout while waiting for replica cluster bootstrap")
 	}
 	l1.Success("Created replica clusters")
 }
@@ -227,7 +226,7 @@ func ExportRWServices(c kube.Cluster, logger *cli.Logger) {
 		"v1",
 		"clusters",
 	)
-	exit.OnErrorWithMessage(l1.Fail("Error fetching custom resources", err))
+	exit.OnErrorWithMessage(err, "Error fetching custom resources")
 	l1.Success("Fetched clusters")
 
 	// Export services
@@ -251,12 +250,12 @@ func DemoteOriginCluster(c kube.Cluster, logger *cli.Logger) {
 		"v1",
 		"clusters",
 	)
-	exit.OnErrorWithMessage(l1.Fail("Error fetching custom resources", err))
+	exit.OnErrorWithMessage(err, "Error fetching custom resources")
 	l1.Success("Fetched clusters")
 
 	for _, resource := range resources {
 		cluster, err := ConvertToCluster(resource)
-		exit.OnErrorWithMessage(l1.Fail("Error converting origin cluster", err))
+		exit.OnErrorWithMessage(err, "Error converting origin cluster")
 
 		// Update cluster spec
 		cluster.Spec.ExternalClusters = []apiv1.ExternalCluster{
@@ -296,15 +295,11 @@ func DemoteOriginCluster(c kube.Cluster, logger *cli.Logger) {
 
 		// Convert the updated cluster back to unstructured
 		updatedObj, err := ConvertFromCluster(cluster)
-		if err != nil {
-			exit.OnErrorWithMessage(l1.Fail("Error converting updated cluster to unstructured", err))
-		}
+		exit.OnErrorWithMessage(err, "Error converting updated cluster to unstructured")
 
 		// Update the resource
 		err = c.UpdateCustomResource(cluster.Namespace, updatedObj)
-		if err != nil {
-			exit.OnErrorWithMessage(l1.Fail(fmt.Sprintf("Error updating cluster %s in namespace %s", cluster.Name, cluster.Namespace), err))
-		}
+		exit.OnErrorWithMessage(err, fmt.Sprintf("Error updating cluster %s in namespace %s", cluster.Name, cluster.Namespace))
 
 		l1.Success(fmt.Sprintf("Successfully updated cluster %s in namespace %s", cluster.Name, cluster.Namespace))
 	}
@@ -321,26 +316,24 @@ func DisableReplication(c kube.Cluster, logger *cli.Logger) {
 		"v1",
 		"clusters",
 	)
-	exit.OnErrorWithMessage(l1.Fail("Error fetching custom resources", err))
+	exit.OnErrorWithMessage(err, "Error fetching custom resources")
 	l1.Success("Fetched clusters")
 
 	for _, resource := range resources {
 		cluster, err := ConvertToCluster(resource)
-		exit.OnErrorWithMessage(l1.Fail("Error converting origin cluster", err))
+		exit.OnErrorWithMessage(err, "Error converting origin cluster")
 
 		enabled := false
 		cluster.Spec.ReplicaCluster.Enabled = &enabled
 
 		// Convert the updated cluster back to unstructured
 		updatedObj, err := ConvertFromCluster(cluster)
-		if err != nil {
-			exit.OnErrorWithMessage(l1.Fail("Error converting updated cluster to unstructured", err))
-		}
+		exit.OnErrorWithMessage(err, "Error converting updated cluster to unstructured")
 
 		// Update the resource
 		err = c.UpdateCustomResource(cluster.Namespace, updatedObj)
 		if err != nil {
-			exit.OnErrorWithMessage(l1.Fail(fmt.Sprintf("Error updating cluster %s in namespace %s", cluster.Name, cluster.Namespace), err))
+			exit.OnErrorWithMessage(err, fmt.Sprintf("Error updating cluster %s in namespace %s", cluster.Name, cluster.Namespace))
 		}
 
 		l1.Success(fmt.Sprintf("Successfully updated cluster %s in namespace %s", cluster.Name, cluster.Namespace))
