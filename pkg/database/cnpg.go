@@ -17,7 +17,7 @@ import (
 
 func InstallOperator(c kube.Cluster) {
 	logger.Info("Installing cloud native-pg operator")
-	exit.OnErrorWithMessage(c.CreateResourcesFromURL(constants.CNPGOperatorURL), "failed installing cloud native-pg operator")
+	exit.OnErrorWithMessage(c.CreateResourcesFromURL(constants.CNPGOperatorURL, ""), "failed installing cloud native-pg operator")
 	logger.Info("Installed cloud native-pg operator")
 }
 

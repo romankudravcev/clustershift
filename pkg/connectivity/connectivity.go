@@ -67,14 +67,14 @@ func RunClusterConnectivityProbe(clusters kube.Clusters) {
 				targetConfigMap)
 
 			// Create deployments
-			err = clusters.Origin.CreateResourcesFromURL(constants.ConnectivityProbeDeploymentURL)
+			err = clusters.Origin.CreateResourcesFromURL(constants.ConnectivityProbeDeploymentURL, "")
 			if err != nil {
 				logger.Warning("Failed to create resources", err)
 				cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
 				continue
 			}
 
-			err = clusters.Target.CreateResourcesFromURL(constants.ConnectivityProbeDeploymentURL)
+			err = clusters.Target.CreateResourcesFromURL(constants.ConnectivityProbeDeploymentURL, "")
 			if err != nil {
 				logger.Warning("Failed to create resources", err)
 				cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
