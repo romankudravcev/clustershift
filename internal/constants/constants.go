@@ -29,6 +29,18 @@ const (
 	SubmarinerBrokerClientToken = "submariner-k8s-broker-client-token"
 	SubmarinerVersion           = "0.19"
 
+	// Linkerd constants
+	LinkerdEdgeRepoName              = "linkerd-edge"
+	LinkerdRepoName                  = "linkerd"
+	LinkerdEdgeRepoURL               = "https://helm.linkerd.io/edge"
+	LinkerdRepoURL                   = "https://helm.linkerd.io/stable"
+	LinkerdCrdsChartName             = "linkerd-edge/linkerd-crds"
+	LinkerdControlPlaneChartName     = "linkerd-edge/linkerd-control-plane"
+	LinkerdMultiClusterChartName     = "linkerd/linkerd-multicluster"
+	LinkerdMultiClusterLinkChartName = "linkerd/charts"
+	LinkerdNamespace                 = "linkerd"
+	LinkerdMultiClusterNamespace     = "linkerd-multicluster"
+
 	// CNPG constants
 	CNPGOperatorURL   = "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml"
 	CNPGNamespace     = "cnpg-system"
