@@ -12,6 +12,7 @@ type ChartOptions struct {
 	RepoURL     string
 	ReleaseName string
 	ChartName   string
+	Namespace   string
 	Values      string
 	Wait        bool
 	Version     string
