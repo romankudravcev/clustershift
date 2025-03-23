@@ -39,8 +39,8 @@ require (
 	github.com/charmbracelet/x/ansi v0.4.2 // indirect
 	github.com/cloudnative-pg/barman-cloud v0.0.0-20240924124724-92831d48562a // indirect
 	github.com/cloudnative-pg/machinery v0.0.0-20241014090714-c27747f9974b // indirect
-	github.com/containerd/containerd v1.7.20 // indirect
-	github.com/containerd/errdefs v0.1.0 // indirect
+	github.com/containerd/containerd v1.7.27 // indirect
+	github.com/containerd/errdefs v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
 	github.com/cyphar/filepath-securejoin v0.3.1 // indirect
