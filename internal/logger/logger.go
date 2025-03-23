@@ -133,8 +133,8 @@ func (l *Logger) log(level LogLevel, style lipgloss.Style, message string) {
 	if level >= l.currentLevel {
 		consoleLogEntry := fmt.Sprintf("%s %s %s\n",
 			timestamp,
-			PrimaryStyle.Render(getLevelPrefix(level)),
-			style.Render(message),
+			style.Render(getLevelPrefix(level)),
+			message,
 		)
 		fmt.Print(consoleLogEntry)
 	}
@@ -245,6 +245,9 @@ func Info(message string) {
 
 // Warning logs a warning-level message using the global logger
 func Warning(message string, error error) {
+	if error == nil {
+		return
+	}
 	logger, err := GetLogger()
 	if err != nil {
 		fmt.Printf("Failed to get logger: %v\n", err)
@@ -255,6 +258,9 @@ func Warning(message string, error error) {
 
 // Error logs an error-level message using the global logger
 func Error(message string, error error) {
+	if error == nil {
+		return
+	}
 	logger, err := GetLogger()
 	if err != nil {
 		fmt.Printf("Failed to get logger: %v\n", err)
