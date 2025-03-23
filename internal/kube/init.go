@@ -2,12 +2,14 @@ package kube
 
 import (
 	"clustershift/internal/cluster"
+	"clustershift/internal/exit"
 	"fmt"
 
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	traefikclientset "github.com/traefik/traefik/v3/pkg/provider/kubernetes/crd/generated/clientset/versioned"
 )
@@ -41,6 +43,9 @@ func newCluster(kubeconfigPath string, context string) (*Cluster, error) {
 		return nil, fmt.Errorf("failed to build config: %w", err)
 	}
 
+	kubeConfig, err := LoadKubeConfig(kubeconfigPath)
+	exit.OnErrorWithMessage(err, "Failed to load kubeconfig")
+
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize clientset: %w", err)
@@ -64,6 +69,7 @@ func newCluster(kubeconfigPath string, context string) (*Cluster, error) {
 	}
 
 	return &Cluster{
+		Config:             kubeConfig,
 		Clientset:          clientset,
 		TraefikClientset:   traefikClientset,
 		DynamicClientset:   dynamicClientset,
@@ -75,4 +81,12 @@ func newCluster(kubeconfigPath string, context string) (*Cluster, error) {
 // GetClusters returns the initialized origin and target Kubernetes clientset.
 func GetClusters() *Clusters {
 	return clusters
+}
+
+func LoadKubeConfig(kubeconfigPath string) (*clientcmdapi.Config, error) {
+	config, err := clientcmd.LoadFromFile(kubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kubeconfig from file: %w", err)
+	}
+	return config, nil
 }
