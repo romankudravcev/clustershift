@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	appv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,6 +42,100 @@ func (c Cluster) AddNodeLabels(node *v1.Node, labels map[string]string) {
 	}
 }
 
+func (c Cluster) AddLabel(resourceType ResourceType, name, namespace string, labels map[string]string) error {
+	// Create a patch with the new labels
+	patchLabels := map[string]interface{}{"metadata": map[string]interface{}{"labels": labels}}
+	patchBytes, err := json.Marshal(patchLabels)
+	if err != nil {
+		return fmt.Errorf("failed to marshal patch: %v", err)
+	}
+
+	// Apply the patch based on resource type
+	switch resourceType {
+	case Deployment:
+		_, err = c.Clientset.AppsV1().Deployments(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case ConfigMap:
+		_, err = c.Clientset.CoreV1().ConfigMaps(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case Ingress:
+		_, err = c.Clientset.NetworkingV1().Ingresses(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case Secret:
+		_, err = c.Clientset.CoreV1().Secrets(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case Namespace:
+		_, err = c.Clientset.CoreV1().Namespaces().Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case Service:
+		_, err = c.Clientset.CoreV1().Services(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case ServiceAccount:
+		_, err = c.Clientset.CoreV1().ServiceAccounts(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case ClusterRole:
+		_, err = c.Clientset.RbacV1().ClusterRoles().Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case ClusterRoleBind:
+		_, err = c.Clientset.RbacV1().ClusterRoleBindings().Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case Middleware:
+		_, err = c.TraefikClientset.TraefikV1alpha1().Middlewares(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case IngressRoute:
+		_, err = c.TraefikClientset.TraefikV1alpha1().IngressRoutes(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case IngressRouteTCP:
+		_, err = c.TraefikClientset.TraefikV1alpha1().IngressRouteTCPs(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case IngressRouteUDP:
+		_, err = c.TraefikClientset.TraefikV1alpha1().IngressRouteUDPs(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case TraefikService:
+		_, err = c.TraefikClientset.TraefikV1alpha1().TraefikServices(namespace).Patch(context.TODO(), name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	default:
+		return fmt.Errorf("unsupported resource type: %s", resourceType)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to patch resource: %v", err)
+	}
+	return nil
+}
+
+func (c Cluster) AddAnnotation(resource metav1.Object, annotationKey, annotationValue string) error {
+	// Create a patch with the new annotation
+	var patchBytes []byte
+	var err error
+
+	// Check if existing annotations are nil, if so, create a new map
+	annotations := resource.GetAnnotations()
+	if annotations == nil {
+		annotations = make(map[string]string)
+	}
+
+	// Add or update the annotation
+	annotations[annotationKey] = annotationValue
+
+	// Create a patch with the updated annotations
+	patchAnnotations := map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"annotations": annotations,
+		},
+	}
+
+	patchBytes, err = json.Marshal(patchAnnotations)
+	if err != nil {
+		return fmt.Errorf("failed to marshal patch: %v", err)
+	}
+
+	// Determine the type of resource and patch accordingly
+	switch r := resource.(type) {
+	case *v1.Node:
+		_, err = c.Clientset.CoreV1().Nodes().Patch(context.TODO(), r.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case *appv1.Deployment:
+		_, err = c.Clientset.AppsV1().Deployments(r.Namespace).Patch(context.TODO(), r.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case *v1.Pod:
+		_, err = c.Clientset.CoreV1().Pods(r.Namespace).Patch(context.TODO(), r.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case *v1.Service:
+		_, err = c.Clientset.CoreV1().Services(r.Namespace).Patch(context.TODO(), r.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	default:
+		return fmt.Errorf("unsupported resource type: %T", resource)
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to patch resource: %v", err)
+	}
+
+	return nil
+}
 func (c Cluster) FetchServiceCIDRs() (string, error) {
 	service := &v1.Service{
 		ObjectMeta: metav1.ObjectMeta{

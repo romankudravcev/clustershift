@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"net/http"
 	"strings"
 
@@ -107,7 +108,7 @@ func (c Cluster) CreateConfigmap(name string, namespace string, data map[string]
 	}
 }
 
-func (c Cluster) CreateResourcesFromURL(url string) error {
+func (c Cluster) CreateResourcesFromURL(url, namespace string) error {
 	// Register Traefik schemes
 	_ = traefikv1alpha1.AddToScheme(scheme.Scheme)
 
@@ -158,9 +159,11 @@ func (c Cluster) CreateResourcesFromURL(url string) error {
 		}
 
 		// Get namespace
-		namespace := obj.GetNamespace()
 		if namespace == "" {
-			namespace = "default"
+			namespace := obj.GetNamespace()
+			if namespace == "" {
+				namespace = "default"
+			}
 		}
 
 		// Prepare the dynamic resource interface
@@ -186,6 +189,87 @@ func (c Cluster) CreateResourcesFromURL(url string) error {
 
 		//fmt.Printf("Successfully created %s/%s in namespace %s\n",
 		//    gvk.Kind, obj.GetName(), namespace)
+	}
+
+	return nil
+}
+
+func (c Cluster) CreateResourcesFromYaml(yamlContent []byte, namespace string) error {
+	// Register Traefik schemes
+	_ = traefikv1alpha1.AddToScheme(scheme.Scheme)
+
+	// Create decoder directly from the provided byte array
+	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(yamlContent), 4096)
+
+	// Get REST mapper
+	groupResources, err := restmapper.GetAPIGroupResources(c.DiscoveryClientset)
+	if err != nil {
+		return fmt.Errorf("failed to get API group resources: %v", err)
+	}
+	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
+
+	// Process each document in the YAML
+	for {
+		var rawObj runtime.RawExtension
+		if err := decoder.Decode(&rawObj); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("error decoding YAML: %v", err)
+		}
+
+		// Decode YAML to unstructured
+		obj := &unstructured.Unstructured{}
+		yamlSerializer := yamlserializer.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
+		_, gvk, err := yamlSerializer.Decode(rawObj.Raw, nil, obj)
+		if err != nil {
+			return fmt.Errorf("failed to decode manifest: %v", err)
+		}
+
+		// Find GVR
+		mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+		if err != nil {
+			return fmt.Errorf("failed to get REST mapping for %s: %v", gvk.Kind, err)
+		}
+
+		// Get namespace
+		if namespace == "" {
+			ns := obj.GetNamespace()
+			if ns == "" {
+				namespace = "default"
+			} else {
+				namespace = ns
+			}
+		}
+
+		// Prepare the dynamic resource interface
+		var dr dynamic.ResourceInterface
+		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
+			dr = c.DynamicClientset.Resource(mapping.Resource).Namespace(namespace)
+		} else {
+			dr = c.DynamicClientset.Resource(mapping.Resource)
+		}
+
+		// Server side apply
+		_, err = dr.Patch(context.Background(),
+			obj.GetName(),
+			types.ApplyPatchType,
+			rawObj.Raw,
+			metav1.PatchOptions{
+				FieldManager: "clustershift",
+			})
+
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				// If the resource does not exist, create it
+				_, err = dr.Create(context.Background(), obj, metav1.CreateOptions{})
+				if err != nil {
+					return fmt.Errorf("failed to create %s %s: %v", gvk.Kind, obj.GetName(), err)
+				}
+			} else {
+				return fmt.Errorf("failed to apply %s %s: %v", gvk.Kind, obj.GetName(), err)
+			}
+		}
 	}
 
 	return nil
@@ -243,7 +327,72 @@ func (c Cluster) CreateCustomResource(namespace string, resource map[string]inte
 		Create(context.TODO(), unstructuredObj, metav1.CreateOptions{})
 
 	if err != nil {
-		return fmt.Errorf("failed to create resource: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func (c Cluster) PatchCustomResource(namespace string, resource map[string]interface{}) error {
+	apiVersion, ok := resource["apiVersion"].(string)
+	if !ok {
+		return fmt.Errorf("apiVersion not found or not a string")
+	}
+
+	kind, ok := resource["kind"].(string)
+	if !ok {
+		return fmt.Errorf("kind not found or not a string")
+	}
+
+	// Parse group and version
+	var group, version string
+	parts := strings.Split(apiVersion, "/")
+	if len(parts) == 2 {
+		group = parts[0]
+		version = parts[1]
+	} else {
+		group = ""
+		version = parts[0]
+	}
+
+	// Get API group resources and create a REST mapper
+	groupResources, err := restmapper.GetAPIGroupResources(c.DiscoveryClientset)
+	if err != nil {
+		return fmt.Errorf("failed to get API group resources: %v", err)
+	}
+	mapper := restmapper.NewDiscoveryRESTMapper(groupResources)
+
+	// Get the REST mapping
+	gvk := schema.GroupVersionKind{
+		Group:   group,
+		Version: version,
+		Kind:    kind,
+	}
+
+	mapping, err := mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		return fmt.Errorf("failed to get REST mapping: %v", err)
+	}
+
+	// Create unstructured object
+	unstructuredObj := &unstructured.Unstructured{
+		Object: resource,
+	}
+
+	obj, err := unstructuredObj.MarshalJSON()
+	if err != nil {
+		return fmt.Errorf("failed to marshal unstructured object: %v", err)
+	}
+
+	// Use the resource from the mapping
+	_, err = c.DynamicClientset.Resource(mapping.Resource).
+		Namespace(namespace).
+		Patch(context.TODO(), unstructuredObj.GetName(), types.ApplyPatchType, obj, metav1.PatchOptions{
+			FieldManager: "clustershift",
+		})
+
+	if err != nil {
+		return err
 	}
 
 	return nil
