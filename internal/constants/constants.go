@@ -4,6 +4,10 @@ const (
 	// Debug flag helm
 	Debug = true
 
+	// Kubeconfig temp paths
+	KubeconfigOriginTmp = "tmp/origin_kubeconfig.yaml"
+	KubeconfigTargetTmp = "tmp/target_kubeconfig.yaml"
+
 	// Conectivity probe constants
 	ConnectivityProbeDeploymentURL  = "https://raw.githubusercontent.com/romankudravcev/kube-connectivity-probe/main/infra/Deployment.yml"
 	ConnectivityProbeConfigmapURL   = "https://raw.githubusercontent.com/romankudravcev/kube-connectivity-probe/main/infra/Configmap.yml"

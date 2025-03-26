@@ -20,6 +20,7 @@ var (
 
 			opts := prompt.MigrationPrompt()
 			migration.Migrate(kubeconfig1, kubeconfig2, opts)
+			logger.Info("Migration complete")
 		},
 	}
 )

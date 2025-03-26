@@ -6,67 +6,58 @@ import (
 	"clustershift/internal/kube"
 	"clustershift/internal/kubeconfig"
 	"clustershift/internal/logger"
+	"clustershift/internal/prompt"
 	"clustershift/pkg/connectivity"
 	cnpg "clustershift/pkg/database"
+	"clustershift/pkg/linkerd"
 	"clustershift/pkg/redirect"
 	"clustershift/pkg/submariner"
-	"fmt"
 	"time"
 )
 
-func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
-	//TODO extract code
-	logger.Info("Initializing kubernetes clients")
-	// Copy the kubeconfig files to a temporary directory and modify them
-	exit.OnErrorWithMessage(kubeconfig.ProcessKubeconfig(kubeconfigOrigin, "origin"), "Processing Kubeconfig failed")
-	exit.OnErrorWithMessage(kubeconfig.ProcessKubeconfig(kubeconfigTarget, "target"), "Processing Kubeconfig failed")
+func Migrate(kubeconfigOrigin string, kubeconfigTarget string, opts prompt.MigrationOptions) {
+	clusters := initClusters(kubeconfigOrigin, kubeconfigTarget)
 
-	// get new kubeconfig paths
-	kubeconfigOrigin = "tmp/origin_kubeconfig.yaml"
-	kubeconfigTarget = "tmp/target_kubeconfig.yaml"
-
-	clusters, err := kube.InitClients(kubeconfigOrigin, kubeconfigTarget)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	logger.Info("Initialized kubernetes clients")
-
-	// Create clustershift namespace
 	clusters.Origin.CreateNewNamespace("clustershift")
 	clusters.Target.CreateNewNamespace("clustershift")
 
-	// Check connectivity between clusters
-	logger.Info("Checking connectivity between clusters")
 	connectivity.RunClusterConnectivityProbe(clusters)
-	logger.Info("Connectivity check complete")
-
-	// Deploy reverse proxy
-	logger.Info("Deploy reverse proxy for request forwarding")
 	redirect.InitializeRequestForwarding(clusters)
-	logger.Info("Reverse proxy deployed")
 
-	// Create secure connection between clusters via submariner
-	submariner.InstallSubmariner(clusters)
+	establishSecureConnection(opts, clusters)
 
-	logger.Info("Migrating configuration resources")
-	clusters.CreateResourceDiff(kube.Namespace)
-	clusters.CreateResourceDiff(kube.ConfigMap)
-	clusters.CreateResourceDiff(kube.Secret)
-	clusters.CreateResourceDiff(kube.ServiceAccount)
-	clusters.CreateResourceDiff(kube.ClusterRole)
-	clusters.CreateResourceDiff(kube.ClusterRoleBind)
-	logger.Info("Configuration resources migrated")
+	migrateConfigurationResources(clusters)
+	migrateDatabases(clusters)
+	migrateKubernetesResources(clusters)
 
+	cnpg.DemoteOriginCluster(clusters.Origin)
+	cnpg.DisableReplication(clusters.Target)
+	redirect.EnableRequestForwarding(clusters)
+}
+
+func migrateDatabases(clusters kube.Clusters) {
 	logger.Info("Migrate cnpg databases")
 	cnpg.InstallOperator(clusters.Target)
-	kube.WaitForPodsReady(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
+	err := kube.WaitForPodsReady(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
+	exit.OnErrorWithMessage(err, "Failed to wait for CNPG pods to be ready")
+
+	//TODO this is submariner specific!
 	cnpg.AddClustersetDNS(clusters.Origin)
 	cnpg.ExportRWServices(clusters.Origin)
 	cnpg.CreateReplicaClusters(clusters)
+}
 
-	logger.Info("cnpg databases migrated")
+func establishSecureConnection(opts prompt.MigrationOptions, clusters kube.Clusters) {
+	logger.Info("Establishing secure connection between clusters")
+	if opts.NetworkingTool == prompt.NetworkingToolSubmariner {
+		submariner.InstallSubmariner(clusters)
+	} else {
+		linkerd.Install(clusters)
+	}
+	logger.Info("Secure connection established")
+}
 
+func migrateKubernetesResources(clusters kube.Clusters) {
 	logger.Info("Migrating resources")
 	clusters.CreateResourceDiff(kube.Deployment)
 	clusters.CreateResourceDiff(kube.Ingress)
@@ -76,15 +67,27 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string) {
 	clusters.CreateResourceDiff(kube.IngressRouteUDP)
 	clusters.CreateResourceDiff(kube.Middleware)
 	clusters.CreateResourceDiff(kube.TraefikService)
-	logger.Info("Resources migrated")
+}
 
-	// Demote and promote databases
-	cnpg.DemoteOriginCluster(clusters.Origin)
-	cnpg.DisableReplication(clusters.Target)
+func migrateConfigurationResources(clusters kube.Clusters) {
+	logger.Info("Migrating configuration resources")
+	clusters.CreateResourceDiff(kube.Namespace)
+	clusters.CreateResourceDiff(kube.ConfigMap)
+	clusters.CreateResourceDiff(kube.Secret)
+	clusters.CreateResourceDiff(kube.ServiceAccount)
+	clusters.CreateResourceDiff(kube.ClusterRole)
+	clusters.CreateResourceDiff(kube.ClusterRoleBind)
+}
 
-	logger.Info("Enable request forwarding from origin")
-	redirect.EnableRequestForwarding(clusters)
-	logger.Info("Established request forwarding")
+func initClusters(kubeconfigOrigin string, kubeconfigTarget string) kube.Clusters {
+	logger.Info("Initializing kubernetes clients")
 
-	logger.Info("Migration complete")
+	// Copy the kubeconfig files to a temporary directory and modify them
+	exit.OnErrorWithMessage(kubeconfig.ProcessKubeconfig(kubeconfigOrigin, "origin"), "Processing Kubeconfig failed")
+	exit.OnErrorWithMessage(kubeconfig.ProcessKubeconfig(kubeconfigTarget, "target"), "Processing Kubeconfig failed")
+
+	// Initialize the kubernetes clients
+	clusters, err := kube.InitClients(constants.KubeconfigOriginTmp, constants.KubeconfigTargetTmp)
+	exit.OnErrorWithMessage(err, "Failed to initialize kubernetes clients")
+	return clusters
 }
