@@ -26,7 +26,7 @@ func InitializeRequestForwarding(c kube.Clusters) {
 }
 
 func EnableRequestForwarding(c kube.Clusters) {
-	logger.Debug("Enable forwarding")
+	logger.Info("Enable request forwarding from origin")
 	err := c.Origin.CreateResourcesFromURL(constants.HttpProxyIngressURL, "")
 	exit.OnErrorWithMessage(err, "Failed to create resources from URL")
 }
