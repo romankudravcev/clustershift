@@ -11,6 +11,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/linkerd/linkerd2/controller/gen/apis/link/v1alpha1"
+	"github.com/linkerd/linkerd2/pkg/charts/linkerd2"
+	"github.com/linkerd/linkerd2/pkg/multicluster"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -66,7 +69,7 @@ func createKubeconfig(fromCluster kube.Cluster, opts *linkOptions) []byte {
 	return kubeconfig
 }
 
-func createSecrets(toCluster kube.Cluster, configMapValue LinkerdConfig, opts *linkOptions, kubeconfig []byte) {
+func createSecrets(toCluster kube.Cluster, configMapValue linkerd2.Values, opts *linkOptions, kubeconfig []byte) {
 	creds := corev1.Secret{
 		Type:     "mirror.linkerd.io/remote-kubeconfig",
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -129,7 +132,7 @@ func createLink(fromCluster kube.Cluster, toCluster kube.Cluster, opts *linkOpti
 	federatedServiceSelector, err := metav1.ParseToLabelSelector(opts.federatedServiceSelector)
 	exit.OnErrorWithMessage(err, "Error parsing federated service selector")
 
-	link := Link{
+	link := v1alpha1.Link{
 		TypeMeta: metav1.TypeMeta{Kind: "Link", APIVersion: "multicluster.linkerd.io/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      opts.clusterName,
@@ -138,7 +141,7 @@ func createLink(fromCluster kube.Cluster, toCluster kube.Cluster, opts *linkOpti
 				"linkerd.io/created-by": "clustershift",
 			},
 		},
-		Spec: LinkSpec{
+		Spec: v1alpha1.LinkSpec{
 			TargetClusterName:             opts.clusterName,
 			TargetClusterDomain:           "cluster.local",
 			TargetClusterLinkerdNamespace: "linkerd",
@@ -182,7 +185,7 @@ func createLink(fromCluster kube.Cluster, toCluster kube.Cluster, opts *linkOpti
 		}
 		link.Spec.GatewayIdentity = gatewayIdentity
 
-		probeSpec, err := extractProbeSpec(gateway)
+		probeSpec, err := multicluster.ExtractProbeSpec(gateway)
 		exit.OnErrorWithMessage(err, "Error extracting probe spec")
 		link.Spec.ProbeSpec = probeSpec
 

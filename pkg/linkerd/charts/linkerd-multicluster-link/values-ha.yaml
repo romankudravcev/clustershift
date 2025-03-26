@@ -1,2 +1,0 @@
-enablePodAntiAffinity: true
-replicas: 3

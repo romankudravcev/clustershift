@@ -9,6 +9,8 @@ import (
 	"clustershift/internal/kube"
 	"errors"
 	"fmt"
+	multicluster "github.com/linkerd/linkerd2/multicluster/values"
+	"github.com/linkerd/linkerd2/pkg/charts/linkerd2"
 	"gopkg.in/yaml.v2"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/engine"
@@ -19,9 +21,6 @@ import (
 	"path"
 	"regexp"
 
-	"strconv"
-	"time"
-
 	"github.com/linkerd/linkerd2/pkg/charts"
 	"github.com/linkerd/linkerd2/pkg/k8s"
 	chartloader "helm.sh/helm/v3/pkg/chart/loader"
@@ -30,6 +29,8 @@ import (
 
 func LinkCluster(fromCluster kube.Cluster, toCluster kube.Cluster, fromClusterName string) {
 	opts, err := newLinkOptionsWithDefault()
+	exit.OnErrorWithMessage(err, "Error creating link options")
+
 	opts.clusterName = fromClusterName
 	ip, err := fromCluster.FetchKubernetesAPIEndpoint()
 	exit.OnErrorWithMessage(err, "Error fetching Kubernetes API endpoint")
@@ -67,9 +68,10 @@ func LinkCluster(fromCluster kube.Cluster, toCluster kube.Cluster, fromClusterNa
 
 	err = toCluster.CreateResourcesFromYaml(serviceMirrorOut, opts.namespace)
 	exit.OnErrorWithMessage(err, "Error creating resources")
+
 }
 
-func renderServiceMirror(values *Values, valuesOverrides map[string]interface{}, namespace string, format string) ([]byte, error) {
+func renderServiceMirror(values *multicluster.Values, valuesOverrides map[string]interface{}, namespace string, format string) ([]byte, error) {
 	files := []*chartloader.BufferedFile{
 		{Name: chartutil.ChartfileName},
 		{Name: "templates/service-mirror.yaml"},
@@ -155,7 +157,7 @@ func renderServiceMirror(values *Values, valuesOverrides map[string]interface{},
 	return out.Bytes(), nil
 }
 
-func buildServiceMirrorValues(opts *linkOptions) (*Values, error) {
+func buildServiceMirrorValues(opts *linkOptions) (*multicluster.Values, error) {
 	alphaNumDashDot := regexp.MustCompile(`^[\.a-zA-Z0-9-]+$`)
 
 	if !alphaNumDashDot.MatchString(opts.controlPlaneVersion) {
@@ -180,7 +182,10 @@ func buildServiceMirrorValues(opts *linkOptions) (*Values, error) {
 		return nil, fmt.Errorf("--gateway-port and --gateway=false are mutually exclusive")
 	}
 
-	defaults := NewLinkValues()
+	defaults, err := multicluster.NewLinkValues()
+	if err != nil {
+		return nil, err
+	}
 	defaults.TargetClusterName = opts.clusterName
 
 	return defaults, nil
@@ -214,39 +219,6 @@ func extractSAToken(secrets []v1.Secret, saName string) (string, error) {
 	return "", fmt.Errorf("could not find service account token secret for %s", saName)
 }
 
-// ExtractProbeSpec parses the ProbSpec from a gateway service's annotations.
-// For now we're not including the failureThreshold and timeout fields which
-// are new since edge-24.9.3, to avoid errors when attempting to apply them in
-// clusters with an older Link CRD.
-func extractProbeSpec(gateway *v1.Service) (ProbeSpec, error) {
-	path := gateway.Annotations[k8s.GatewayProbePath]
-	if path == "" {
-		return ProbeSpec{}, errors.New("probe path is empty")
-	}
-
-	port, err := extractPort(gateway.Spec, k8s.ProbePortName)
-	if err != nil {
-		return ProbeSpec{}, err
-	}
-
-	// the `mirror.linkerd.io/probe-period` annotation is initialized with a
-	// default value of "3", but we require a duration-formatted string. So we
-	// perform the conversion, if required.
-	period := gateway.Annotations[k8s.GatewayProbePeriod]
-	if secs, err := strconv.ParseInt(period, 10, 64); err == nil {
-		dur := time.Duration(secs) * time.Second
-		period = dur.String()
-	} else if _, err := time.ParseDuration(period); err != nil {
-		return ProbeSpec{}, fmt.Errorf("could not parse probe period: %w", err)
-	}
-
-	return ProbeSpec{
-		Path:   path,
-		Port:   fmt.Sprintf("%d", port),
-		Period: period,
-	}, nil
-}
-
 func extractPort(spec v1.ServiceSpec, portName string) (uint32, error) {
 	for _, p := range spec.Ports {
 		if p.Name == portName {
@@ -259,7 +231,7 @@ func extractPort(spec v1.ServiceSpec, portName string) (uint32, error) {
 	return 0, fmt.Errorf("could not find port with name %s", portName)
 }
 
-func getConfigValues(configMap *v1.ConfigMap) LinkerdConfig {
+func getConfigValues(configMap *v1.ConfigMap) linkerd2.Values {
 
 	rawValues := configMap.Data["values"]
 
@@ -267,7 +239,7 @@ func getConfigValues(configMap *v1.ConfigMap) LinkerdConfig {
 	rawValuesBytes, err := removeGlobalFieldIfPresent([]byte(rawValues))
 	exit.OnErrorWithMessage(err, "Error removing global field from values")
 
-	var config LinkerdConfig
+	var config linkerd2.Values
 
 	// Unmarshal the YAML data into the Config struct
 	err = yaml.Unmarshal(rawValuesBytes, &config)
