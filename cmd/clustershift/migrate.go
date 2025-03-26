@@ -1,8 +1,9 @@
 package clustershift
 
 import (
+	"clustershift/internal/logger"
+	"clustershift/internal/prompt"
 	"clustershift/pkg/migration"
-
 	"github.com/spf13/cobra"
 )
 
@@ -14,7 +15,11 @@ var (
 		Use:   "migrate",
 		Short: "migrate origin cluster to target cluster",
 		Run: func(cmd *cobra.Command, args []string) {
-			migration.Migrate(kubeconfig1, kubeconfig2)
+			logger.Info("Starting migration process...")
+			logger.Info("You will be prompted to select a networking tool and rerouting option to establish a secure connection and manage traffic between the clusters.")
+
+			opts := prompt.MigrationPrompt()
+			migration.Migrate(kubeconfig1, kubeconfig2, opts)
 		},
 	}
 )

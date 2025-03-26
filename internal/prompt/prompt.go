@@ -24,3 +24,13 @@ func Select(message string, options []string) string {
 
 	return selected
 }
+
+func MigrationPrompt() MigrationOptions {
+	networkingTool := Select("Select a networking tool", []string{NetworkingToolSubmariner + " (recommended)", NetworkingToolLinkerd})
+	rerouting := Select("Select a rerouting option", []string{ReroutingClustershift + " (recommended)", ReroutingSubmariner, ReroutingLinkerd})
+
+	return MigrationOptions{
+		NetworkingTool: networkingTool,
+		Rerouting:      rerouting,
+	}
+}
