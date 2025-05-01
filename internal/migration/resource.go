@@ -13,7 +13,8 @@ type Resources interface {
 	InstallNetworkingTool(clusters kube.Clusters)
 	GetDNSName(name, namespace string) string
 	ExportService(c kube.Cluster, namespace string, name string)
-	GetNetworkingTool() string // Added method to access the tool name
+	GetNetworkingTool() string
+	GetCNPGHostname(clusterName, dbClusterName, namespace string) string
 }
 
 type SubmarinerResources struct {
@@ -36,6 +37,10 @@ func (s *SubmarinerResources) GetNetworkingTool() string {
 	return s.networkingTool
 }
 
+func (s *SubmarinerResources) GetCNPGHostname(clusterName, dbClusterName, namespace string) string {
+	return fmt.Sprintf("%s.%s-rw.%s.svc.clusterset.local", clusterName, dbClusterName, namespace)
+}
+
 type LinkerdResources struct {
 	networkingTool string
 }
@@ -56,6 +61,10 @@ func (l *LinkerdResources) GetNetworkingTool() string {
 	return l.networkingTool
 }
 
+func (l *LinkerdResources) GetCNPGHostname(clusterName, dbClusterName, namespace string) string {
+	return fmt.Sprintf("%s.%s-rw.%s.svc.clusterset.local", clusterName, dbClusterName, namespace)
+}
+
 type SkupperResources struct {
 	networkingTool string
 }
@@ -74,6 +83,10 @@ func (s *SkupperResources) ExportService(c kube.Cluster, namespace string, name 
 
 func (s *SkupperResources) GetNetworkingTool() string {
 	return s.networkingTool
+}
+
+func (s *SkupperResources) GetCNPGHostname(clusterName, dbClusterName, namespace string) string {
+	return fmt.Sprintf("%s-rw-%s.%s.svc.cluster.local", dbClusterName, clusterName, namespace)
 }
 
 func GetMigrationResources(tool string) (Resources, error) {
