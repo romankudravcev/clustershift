@@ -23,7 +23,7 @@ func (c *Clusters) CreateResourceDiff(resourceType ResourceType) {
 	*/
 
 	for _, resource := range diffResources.([]interface{}) {
-		newResource := cleanResourceForCreation(resource)
+		newResource := CleanResourceForCreation(resource)
 		resourceValue := reflect.ValueOf(newResource).Elem()
 
 		namespace := resourceValue.FieldByName("ObjectMeta").FieldByName("Namespace").String()
@@ -69,7 +69,7 @@ func (c Clusters) getResourceDiff(resourceType ResourceType) (interface{}, error
 	return diffResources, nil
 }
 
-func cleanResourceForCreation(resource interface{}) interface{} {
+func CleanResourceForCreation(resource interface{}) interface{} {
 	resourceValue := reflect.ValueOf(resource)
 	if resourceValue.Kind() == reflect.Ptr {
 		resourceValue = resourceValue.Elem()
