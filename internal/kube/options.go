@@ -11,6 +11,7 @@ import (
 )
 
 type Cluster struct {
+	Name               string
 	Config             *clientcmdapi.Config
 	Clientset          *kubernetes.Clientset
 	TraefikClientset   *traefikclientset.Clientset
