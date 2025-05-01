@@ -26,8 +26,8 @@ func Select(message string, options []string) string {
 }
 
 func MigrationPrompt() MigrationOptions {
-	networkingTool := Select("Select a networking tool", []string{NetworkingToolSubmariner + " (recommended)", NetworkingToolLinkerd, NetworkingToolSkupper})
-	rerouting := Select("Select a rerouting option", []string{ReroutingClustershift + " (recommended)", ReroutingSubmariner, ReroutingLinkerd, ReroutingSkupper})
+	networkingTool := Select("Select a networking tool", []string{NetworkingToolSubmariner, NetworkingToolLinkerd, NetworkingToolSkupper})
+	rerouting := Select("Select a rerouting option", []string{ReroutingClustershift, ReroutingSubmariner, ReroutingLinkerd, ReroutingSkupper})
 
 	return MigrationOptions{
 		NetworkingTool: networkingTool,
