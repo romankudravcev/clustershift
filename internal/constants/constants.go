@@ -4,6 +4,10 @@ const (
 	// Debug flag helm
 	Debug = true
 
+	// Kubeconfig temp paths
+	KubeconfigOriginTmp = "tmp/origin_kubeconfig.yaml"
+	KubeconfigTargetTmp = "tmp/target_kubeconfig.yaml"
+
 	// Conectivity probe constants
 	ConnectivityProbeDeploymentURL  = "https://raw.githubusercontent.com/romankudravcev/kube-connectivity-probe/main/infra/Deployment.yml"
 	ConnectivityProbeConfigmapURL   = "https://raw.githubusercontent.com/romankudravcev/kube-connectivity-probe/main/infra/Configmap.yml"
@@ -40,6 +44,9 @@ const (
 	LinkerdMultiClusterLinkChartName = "linkerd/charts"
 	LinkerdNamespace                 = "linkerd"
 	LinkerdMultiClusterNamespace     = "linkerd-multicluster"
+
+	// Skupper constants
+	SkupperSiteControllerURL = "https://raw.githubusercontent.com/skupperproject/skupper/refs/heads/1.8/cmd/site-controller/deploy-watch-all-ns.yaml"
 
 	// CNPG constants
 	CNPGOperatorURL   = "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml"

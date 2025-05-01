@@ -12,33 +12,34 @@ import (
 )
 
 func InitializeRequestForwarding(c kube.Clusters) {
+	logger.Info("Deploy reverse proxy for request forwarding")
+
 	// Get the Loadbalancer IP of the target cluster
-	logger.Info("Fetching loadbalancer IP")
+	logger.Debug("Fetching loadbalancer IP")
 	ip, err := getLoadbalancerIP(c.Target)
 	exit.OnErrorWithMessage(err, "Failed to get loadbalancer ip")
-	logger.Info(fmt.Sprintf("Fetched loadbalancer IP: %s", ip))
+	logger.Debug(fmt.Sprintf("Fetched loadbalancer IP: %s", ip))
 
 	// Create HTTP proxy resources in the origin cluster
-	logger.Info("Deploying proxy")
+	logger.Debug("Deploying proxy")
 	createHttpProxyDeployment(c.Origin, ip)
-	logger.Info("Deployed proxy")
 }
 
 func EnableRequestForwarding(c kube.Clusters) {
-	logger.Info("Enable forwarding")
-	c.Origin.CreateResourcesFromURL(constants.HttpProxyIngressURL, "")
-	logger.Info("Forwarding enabled")
+	logger.Info("Enable request forwarding from origin")
+	err := c.Origin.CreateResourcesFromURL(constants.HttpProxyIngressURL, "clustershift")
+	exit.OnErrorWithMessage(err, "Failed to create resources from URL")
 }
 
 func getLoadbalancerIP(c kube.Cluster) (string, error) {
 	services, err := c.FetchResources(kube.Service)
 	if err != nil {
-		return "", fmt.Errorf("Fetching services for loadbalancer ip failed: %v", err)
+		return "", fmt.Errorf("fetching services for loadbalancer ip failed: %v", err)
 	}
 
 	serviceList, ok := services.(*v1.ServiceList)
 	if !ok {
-		return "", fmt.Errorf("Failed to cast resources to *v1.ServiceList")
+		return "", fmt.Errorf("failed to cast resources to *v1.ServiceList")
 	}
 
 	for _, service := range serviceList.Items {
@@ -48,7 +49,7 @@ func getLoadbalancerIP(c kube.Cluster) (string, error) {
 			return ip, nil
 		}
 	}
-	return "", fmt.Errorf("No LoadBalancer IP found")
+	return "", fmt.Errorf("no LoadBalancer IP found")
 }
 
 func createHttpProxyDeployment(c kube.Cluster, lbIpTarget string) {
@@ -60,31 +61,6 @@ func createHttpProxyDeployment(c kube.Cluster, lbIpTarget string) {
 	c.CreateConfigmap("http-proxy-config", constants.HttpProxyNamespace, data)
 
 	// Create resources from yaml
-	c.CreateResourcesFromURL(constants.HttpProxyDeploymentURL, "")
+	err := c.CreateResourcesFromURL(constants.HttpProxyDeploymentURL, "clustershift")
+	exit.OnErrorWithMessage(err, "Failed to create resources from URL")
 }
-
-/*
-func DeleteIngressRouteExceptProxy(c kube.Cluster) {
-	// Fetch all ingress routes
-	resources, err := c.FetchResources(kube.IngressRoute)
-	if err != nil {
-		//TODO error handling
-	}
-
-	ingressRoutes, ok := resources.(*traefikv1alpha1.IngressRouteList)
-	if !ok {
-		//TODO error handling
-	}
-
-	for _, ingressRoute := range ingressRoutes.Items {
-		name := ingressRoute.Name
-		namespace := ingressRoute.Namespace
-
-		if namespace == "proxy" {
-			continue
-		}
-
-		c.DeleteResource(kube.IngressRoute, name, namespace)
-	}
-}
-*/

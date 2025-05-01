@@ -18,12 +18,12 @@ var clusters *Clusters
 
 // InitClients initializes both Kubernetes clients from the given kubeconfig paths.
 func InitClients(originKubeconfigPath, targetKubeconfigPath string) (Clusters, error) {
-	originCluster, err := newCluster(originKubeconfigPath, "context-origin")
+	originCluster, err := newCluster(originKubeconfigPath, "origin", "context-origin")
 	if err != nil {
 		return Clusters{}, fmt.Errorf("failed to initialize origin cluster: %w", err)
 	}
 
-	targetCluster, err := newCluster(targetKubeconfigPath, "context-target")
+	targetCluster, err := newCluster(targetKubeconfigPath, "target", "context-target")
 	if err != nil {
 		return Clusters{}, fmt.Errorf("failed to initialize target cluster: %w", err)
 	}
@@ -37,7 +37,7 @@ func InitClients(originKubeconfigPath, targetKubeconfigPath string) (Clusters, e
 	return *clusters, nil
 }
 
-func newCluster(kubeconfigPath string, context string) (*Cluster, error) {
+func newCluster(kubeconfigPath, name, context string) (*Cluster, error) {
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build config: %w", err)
@@ -69,6 +69,7 @@ func newCluster(kubeconfigPath string, context string) (*Cluster, error) {
 	}
 
 	return &Cluster{
+		Name:               name,
 		Config:             kubeConfig,
 		Clientset:          clientset,
 		TraefikClientset:   traefikClientset,

@@ -11,7 +11,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-func InstallSubmariner(c kube.Clusters) {
+func Install(c kube.Clusters) {
 	logger.Info("Installing Submariner")
 	defer logger.Info("Submariner installed")
 
