@@ -27,7 +27,7 @@ func InitializeRequestForwarding(c kube.Clusters) {
 
 func EnableRequestForwarding(c kube.Clusters) {
 	logger.Info("Enable request forwarding from origin")
-	err := c.Origin.CreateResourcesFromURL(constants.HttpProxyIngressURL, "")
+	err := c.Origin.CreateResourcesFromURL(constants.HttpProxyIngressURL, "clustershift")
 	exit.OnErrorWithMessage(err, "Failed to create resources from URL")
 }
 
@@ -61,6 +61,6 @@ func createHttpProxyDeployment(c kube.Cluster, lbIpTarget string) {
 	c.CreateConfigmap("http-proxy-config", constants.HttpProxyNamespace, data)
 
 	// Create resources from yaml
-	err := c.CreateResourcesFromURL(constants.HttpProxyDeploymentURL, "")
+	err := c.CreateResourcesFromURL(constants.HttpProxyDeploymentURL, "clustershift")
 	exit.OnErrorWithMessage(err, "Failed to create resources from URL")
 }
