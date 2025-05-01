@@ -54,7 +54,7 @@ func migrateDatabases(resources migration2.Resources) {
 
 	cnpg.AddClustersetDNS(clusters.Origin, resources)
 	cnpg.ExportRWServices(clusters, clusters.Origin, resources)
-	cnpg.CreateReplicaClusters(clusters)
+	cnpg.CreateReplicaClusters(clusters, resources)
 }
 
 func migrateKubernetesResources() {

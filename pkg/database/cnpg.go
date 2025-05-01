@@ -19,7 +19,7 @@ import (
 
 func InstallOperator(c kube.Cluster) {
 	logger.Info("Installing cloud native-pg operator")
-	exit.OnErrorWithMessage(c.CreateResourcesFromURL(constants.CNPGOperatorURL, ""), "failed installing cloud native-pg operator")
+	exit.OnErrorWithMessage(c.CreateResourcesFromURL(constants.CNPGOperatorURL, "cnpg-system"), "failed installing cloud native-pg operator")
 }
 
 func ConvertToCluster(data map[string]interface{}) (*apiv1.Cluster, error) {
@@ -56,6 +56,10 @@ func addRWServiceToYaml(c kube.Cluster, resources []map[string]interface{}, migr
 	for _, resource := range resources {
 		name := resource["metadata"].(map[string]interface{})["name"].(string)
 		namespace := resource["metadata"].(map[string]interface{})["namespace"].(string)
+
+		if migrationResources.GetNetworkingTool() == prompt.NetworkingToolSkupper {
+			name = name + "-rw-" + c.Name
+		}
 
 		dns := migrationResources.GetDNSName(name, namespace)
 
@@ -113,7 +117,7 @@ func AddClustersetDNS(c kube.Cluster, migrationResources migration.Resources) {
 	exit.OnErrorWithMessage(err, "Error updating cluster resources")
 }
 
-func createReplicaCluster(originCluster *apiv1.Cluster) (*apiv1.Cluster, error) {
+func createReplicaCluster(c kube.Cluster, originCluster *apiv1.Cluster, migrationResources migration.Resources) (*apiv1.Cluster, error) {
 	// Create a deep copy of the origin cluster
 	replicaCluster := originCluster.DeepCopy()
 
@@ -145,7 +149,7 @@ func createReplicaCluster(originCluster *apiv1.Cluster) (*apiv1.Cluster, error) 
 		{
 			Name: originCluster.Name,
 			ConnectionParameters: map[string]string{
-				"host":    "origin." + originCluster.Name + "-rw." + originCluster.Namespace + ".svc.clusterset.local",
+				"host":    migrationResources.GetCNPGHostname(c.Name, originCluster.Name, originCluster.Namespace),
 				"user":    "streaming_replica",
 				"dbname":  "postgres",
 				"sslmode": "verify-full",
@@ -175,7 +179,7 @@ func createReplicaCluster(originCluster *apiv1.Cluster) (*apiv1.Cluster, error) 
 	return replicaCluster, nil
 }
 
-func CreateReplicaClusters(c kube.Clusters) {
+func CreateReplicaClusters(c kube.Clusters, migrationResources migration.Resources) {
 	logger.Info("Creating replica cluster")
 
 	// Fetch cnpg clusters from origin
@@ -195,7 +199,7 @@ func CreateReplicaClusters(c kube.Clusters) {
 		exit.OnErrorWithMessage(err, "Error converting origin cluster")
 
 		// Create replica cluster from origin
-		replicaCluster, err := createReplicaCluster(originCluster)
+		replicaCluster, err := createReplicaCluster(c.Origin, originCluster, migrationResources)
 		exit.OnErrorWithMessage(err, "Error creating replica cluster")
 
 		logger.Debug(fmt.Sprintf("%v", replicaCluster))
