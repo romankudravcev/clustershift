@@ -1,12 +1,9 @@
 module clustershift
 
-go 1.23.6
-
-toolchain go1.24.1
+go 1.24.1
 
 require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
-	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/cloudnative-pg/cloudnative-pg v1.25.1
 	github.com/linkerd/linkerd2 v0.5.1-0.20230622230320-da70f77695bb
@@ -38,6 +35,7 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
+	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
 	github.com/charmbracelet/x/ansi v0.4.2 // indirect
