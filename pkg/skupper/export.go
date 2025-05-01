@@ -13,5 +13,5 @@ func ExportService(c kube.Cluster, namespace string, name string) {
 	exit.OnErrorWithMessage(err, "Could not fetch service")
 	service := serviceInterface.(*v1.Service)
 	exit.OnErrorWithMessage(c.AddAnnotation(service, "skupper.io/proxy", "tcp"), "Failed to annotate service")
-	exit.OnErrorWithMessage(c.AddAnnotation(service, "skupper.io/address", name+c.Name), "Failed to annotate service")
+	exit.OnErrorWithMessage(c.AddAnnotation(service, "skupper.io/address", name+"-"+c.Name), "Failed to annotate service")
 }
