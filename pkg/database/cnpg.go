@@ -6,6 +6,8 @@ import (
 	"clustershift/internal/kube"
 	"clustershift/internal/logger"
 	"clustershift/internal/migration"
+	"clustershift/internal/prompt"
+	"clustershift/pkg/skupper"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -212,7 +214,7 @@ func CreateReplicaClusters(c kube.Clusters) {
 	logger.Info("Created replica clusters")
 }
 
-func ExportRWServices(c kube.Cluster, migrationResources migration.Resources) {
+func ExportRWServices(clusters kube.Clusters, c kube.Cluster, migrationResources migration.Resources) {
 	logger.Info("Exporting cnpg rw services")
 
 	// Fetch all cnpg clusters
@@ -230,6 +232,9 @@ func ExportRWServices(c kube.Cluster, migrationResources migration.Resources) {
 		namespace := resource["metadata"].(map[string]interface{})["namespace"].(string)
 		serviceName := fmt.Sprintf("%s-rw", clusterName)
 
+		if migrationResources.GetNetworkingTool() == prompt.NetworkingToolSkupper {
+			skupper.CreateSiteConnection(clusters, namespace)
+		}
 		migrationResources.ExportService(c, namespace, serviceName)
 	}
 

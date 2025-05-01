@@ -53,7 +53,7 @@ func migrateDatabases(resources migration2.Resources) {
 	exit.OnErrorWithMessage(err, "Failed to wait for CNPG pods to be ready")
 
 	cnpg.AddClustersetDNS(clusters.Origin, resources)
-	cnpg.ExportRWServices(clusters.Origin, resources)
+	cnpg.ExportRWServices(clusters, clusters.Origin, resources)
 	cnpg.CreateReplicaClusters(clusters)
 }
 
