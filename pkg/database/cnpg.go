@@ -5,7 +5,7 @@ import (
 	"clustershift/internal/exit"
 	"clustershift/internal/kube"
 	"clustershift/internal/logger"
-	"clustershift/pkg/submariner"
+	"clustershift/internal/migration"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -18,7 +18,6 @@ import (
 func InstallOperator(c kube.Cluster) {
 	logger.Info("Installing cloud native-pg operator")
 	exit.OnErrorWithMessage(c.CreateResourcesFromURL(constants.CNPGOperatorURL, ""), "failed installing cloud native-pg operator")
-	logger.Info("Installed cloud native-pg operator")
 }
 
 func ConvertToCluster(data map[string]interface{}) (*apiv1.Cluster, error) {
@@ -51,11 +50,12 @@ func ConvertFromCluster(cluster *apiv1.Cluster) (map[string]interface{}, error) 
 	return data, nil
 }
 
-func addRWServiceToYaml(c kube.Cluster, resources []map[string]interface{}) error {
+func addRWServiceToYaml(c kube.Cluster, resources []map[string]interface{}, migrationResources migration.Resources) error {
 	for _, resource := range resources {
 		name := resource["metadata"].(map[string]interface{})["name"].(string)
 		namespace := resource["metadata"].(map[string]interface{})["namespace"].(string)
-		dns := fmt.Sprintf("origin.%s-rw.%s.svc.clusterset.local", name, namespace)
+
+		dns := migrationResources.GetDNSName(name, namespace)
 
 		spec := resource["spec"].(map[string]interface{})
 
@@ -93,7 +93,7 @@ func addRWServiceToYaml(c kube.Cluster, resources []map[string]interface{}) erro
 	return nil
 }
 
-func AddClustersetDNS(c kube.Cluster) {
+func AddClustersetDNS(c kube.Cluster, migrationResources migration.Resources) {
 	logger.Info("Adding submariner clusterset DNS")
 
 	// Fetch all cnpg clusters
@@ -104,15 +104,11 @@ func AddClustersetDNS(c kube.Cluster) {
 		"clusters",
 	)
 	exit.OnErrorWithMessage(err, "Error fetching custom resources")
-	logger.Info("Fetched clusters")
 
 	// Add clusterset DNS to each cluster
 	logger.Info("Updating cluster resources")
-	err = addRWServiceToYaml(c, resources)
+	err = addRWServiceToYaml(c, resources, migrationResources)
 	exit.OnErrorWithMessage(err, "Error updating cluster resources")
-	logger.Info("Updated cluster resources")
-
-	logger.Info("Added submariner clusterset DNS")
 }
 
 func createReplicaCluster(originCluster *apiv1.Cluster) (*apiv1.Cluster, error) {
@@ -216,7 +212,7 @@ func CreateReplicaClusters(c kube.Clusters) {
 	logger.Info("Created replica clusters")
 }
 
-func ExportRWServices(c kube.Cluster) {
+func ExportRWServices(c kube.Cluster, migrationResources migration.Resources) {
 	logger.Info("Exporting cnpg rw services")
 
 	// Fetch all cnpg clusters
@@ -227,17 +223,16 @@ func ExportRWServices(c kube.Cluster) {
 		"clusters",
 	)
 	exit.OnErrorWithMessage(err, "Error fetching custom resources")
-	logger.Info("Fetched clusters")
 
 	// Export services
 	for _, resource := range resources {
 		clusterName := resource["metadata"].(map[string]interface{})["name"].(string)
 		namespace := resource["metadata"].(map[string]interface{})["namespace"].(string)
 		serviceName := fmt.Sprintf("%s-rw", clusterName)
-		submariner.Export(c, namespace, serviceName, "")
+
+		migrationResources.ExportService(c, namespace, serviceName)
 	}
 
-	logger.Info("Service export successful")
 }
 
 func DemoteOriginCluster(c kube.Cluster) {
