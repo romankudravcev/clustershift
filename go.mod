@@ -6,7 +6,7 @@ require (
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/cloudnative-pg/cloudnative-pg v1.25.1
-	github.com/linkerd/linkerd2 v0.5.1-0.20230622230320-da70f77695bb
+	github.com/linkerd/linkerd2 v0.5.1-0.20240220194759-f0d861ea9b92
 	github.com/mittwald/go-helm-client v0.12.14
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.19.0
@@ -110,7 +110,7 @@ require (
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
-	github.com/linkerd/linkerd2-proxy-api v0.9.0 // indirect
+	github.com/linkerd/linkerd2-proxy-api v0.13.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/magiconair/properties v1.8.9 // indirect
 	github.com/mailru/easyjson v0.9.0 // indirect
@@ -205,7 +205,7 @@ require (
 	k8s.io/cli-runtime v0.32.2 // indirect
 	k8s.io/component-base v0.32.2 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
-	k8s.io/kube-aggregator v0.27.1 // indirect
+	k8s.io/kube-aggregator v0.29.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20241212222426-2c72e554b1e7 // indirect
 	k8s.io/kubectl v0.32.2 // indirect
 	k8s.io/utils v0.0.0-20241210054802-24370beab758 // indirect
