@@ -9,9 +9,9 @@ import (
 	migration2 "clustershift/internal/migration"
 	"clustershift/internal/prompt"
 	"clustershift/pkg/connectivity"
-	cnpg "clustershift/pkg/database"
+	"clustershift/pkg/database/cnpg"
+	"clustershift/pkg/database/mongo"
 	"clustershift/pkg/redirect"
-	"time"
 )
 
 var clusters kube.Clusters
@@ -22,7 +22,6 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string, opts prompt.Migra
 
 	logger.Info("Establishing secure connection between clusters")
 	resources.InstallNetworkingTool(clusters)
-
 	migrateConfigurationResources()
 	migrateDatabases(resources)
 	migrateKubernetesResources()
@@ -47,14 +46,8 @@ func prepareMigration(kubeconfigOrigin string, kubeconfigTarget string, opts pro
 }
 
 func migrateDatabases(resources migration2.Resources) {
-	logger.Info("Migrate cnpg databases")
-	cnpg.InstallOperator(clusters.Target)
-	err := kube.WaitForPodsReady(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
-	exit.OnErrorWithMessage(err, "Failed to wait for CNPG pods to be ready")
-
-	cnpg.AddClustersetDNS(clusters.Origin, resources)
-	cnpg.ExportRWServices(clusters, clusters.Origin, resources)
-	cnpg.CreateReplicaClusters(clusters, resources)
+	cnpg.Migrate(clusters, resources)
+	mongo.Migrate(clusters, resources)
 }
 
 func migrateKubernetesResources() {

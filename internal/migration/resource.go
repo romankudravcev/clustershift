@@ -12,6 +12,7 @@ import (
 type Resources interface {
 	InstallNetworkingTool(clusters kube.Clusters)
 	GetDNSName(name, namespace string) string
+	GetHeadlessDNSName(podName, serviceName, namespace, clusterId string) string
 	ExportService(c kube.Cluster, namespace string, name string)
 	GetNetworkingTool() string
 	GetCNPGHostname(clusterName, dbClusterName, namespace string) string
@@ -27,6 +28,10 @@ func (s *SubmarinerResources) InstallNetworkingTool(clusters kube.Clusters) {
 
 func (s *SubmarinerResources) GetDNSName(name, namespace string) string {
 	return fmt.Sprintf("origin.%s-rw.%s.svc.clusterset.local", name, namespace)
+}
+
+func (s *SubmarinerResources) GetHeadlessDNSName(podName, serviceName, namespace, clusterId string) string {
+	return fmt.Sprintf("%s.%s.%s.%s.svc.clusterset.local", podName, clusterId, serviceName, namespace)
 }
 
 func (s *SubmarinerResources) ExportService(c kube.Cluster, namespace string, name string) {
@@ -53,6 +58,11 @@ func (l *LinkerdResources) GetDNSName(name, namespace string) string {
 	return fmt.Sprintf("%s-rw-origin.%s.svc.cluster.local", name, namespace)
 }
 
+// GetHeadlessDNSName TODO - This is a temporary solution, we need to find a way to handle headless services properly
+func (l *LinkerdResources) GetHeadlessDNSName(podName, serviceName, namespace, clusterId string) string {
+	return fmt.Sprintf("%s.%s.%s.%s.svc.clusterset.local", podName, clusterId, serviceName, namespace)
+}
+
 func (l *LinkerdResources) ExportService(c kube.Cluster, namespace string, name string) {
 	linkerd.ExportService(c, name, namespace)
 }
@@ -75,6 +85,11 @@ func (s *SkupperResources) InstallNetworkingTool(clusters kube.Clusters) {
 
 func (s *SkupperResources) GetDNSName(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
+}
+
+// GetHeadlessDNSName TODO - This is a temporary solution, we need to find a way to handle headless services properly
+func (s *SkupperResources) GetHeadlessDNSName(podName, serviceName, namespace, clusterId string) string {
+	return fmt.Sprintf("%s.%s.%s.%s.svc.clusterset.local", podName, clusterId, serviceName, namespace)
 }
 
 func (s *SkupperResources) ExportService(c kube.Cluster, namespace string, name string) {

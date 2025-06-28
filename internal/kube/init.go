@@ -71,6 +71,7 @@ func newCluster(kubeconfigPath, name, context string) (*Cluster, error) {
 	return &Cluster{
 		Name:               name,
 		Config:             kubeConfig,
+		RestConfig:         config,
 		Clientset:          clientset,
 		TraefikClientset:   traefikClientset,
 		DynamicClientset:   dynamicClientset,

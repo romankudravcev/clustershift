@@ -17,6 +17,7 @@ const (
 	ServiceAccount  K8sResourceType     = "ServiceAccount"
 	ClusterRole     K8sResourceType     = "ClusterRole"
 	ClusterRoleBind K8sResourceType     = "ClusterRoleBinding"
+	StatefulSet     K8sResourceType     = "StatefulSet"
 	Middleware      TraefikResourceType = "Middleware"
 	IngressRoute    TraefikResourceType = "IngressRoute"
 	IngressRouteTCP TraefikResourceType = "IngressRouteTCP"

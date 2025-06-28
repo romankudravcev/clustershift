@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/remotecommand"
 	"strings"
 
 	appv1 "k8s.io/api/apps/v1"
@@ -203,4 +206,29 @@ func (c Cluster) FetchKubernetesAPIEndpoint() (string, error) {
 	}
 
 	return "", fmt.Errorf("no suitable IP and port found for the Kubernetes API endpoint")
+}
+
+func (c Cluster) ExecIntoPod(namespace, podName string, command []string, stdout, stderr io.Writer) error {
+	req := c.Clientset.CoreV1().RESTClient().Post().
+		Resource("pods").
+		Name(podName).
+		Namespace(namespace).
+		SubResource("exec").
+		VersionedParams(&v1.PodExecOptions{
+			Command: command,
+			Stdin:   false,
+			Stdout:  true,
+			Stderr:  true,
+			TTY:     false,
+		}, scheme.ParameterCodec)
+
+	exec, err := remotecommand.NewSPDYExecutor(c.RestConfig, "POST", req.URL())
+	if err != nil {
+		return err
+	}
+
+	return exec.Stream(remotecommand.StreamOptions{
+		Stdout: stdout,
+		Stderr: stderr,
+	})
 }

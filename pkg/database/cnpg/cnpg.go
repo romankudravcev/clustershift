@@ -17,12 +17,30 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func InstallOperator(c kube.Cluster) {
+func Migrate(clusters kube.Clusters, resources migration.Resources) {
+	logger.Info("Scanning for existing cnpg databases")
+	exists := scanExistingDatabases(clusters.Origin)
+
+	if !exists {
+		logger.Info("No existing cnpg databases found, skipping migration")
+		return
+	}
+
+	logger.Info("Migrate cnpg databases")
+	installOperator(clusters.Target)
+	err := kube.WaitForPodsReady(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
+	exit.OnErrorWithMessage(err, "Failed to wait for CNPG pods to be ready")
+
+	addClustersetDNS(clusters.Origin, resources)
+	exportRWServices(clusters, clusters.Origin, resources)
+	createReplicaClusters(clusters, resources)
+}
+func installOperator(c kube.Cluster) {
 	logger.Info("Installing cloud native-pg operator")
 	exit.OnErrorWithMessage(c.CreateResourcesFromURL(constants.CNPGOperatorURL, "cnpg-system"), "failed installing cloud native-pg operator")
 }
 
-func ConvertToCluster(data map[string]interface{}) (*apiv1.Cluster, error) {
+func convertToCluster(data map[string]interface{}) (*apiv1.Cluster, error) {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
 		return nil, err
@@ -36,7 +54,7 @@ func ConvertToCluster(data map[string]interface{}) (*apiv1.Cluster, error) {
 	return cluster, nil
 }
 
-func ConvertFromCluster(cluster *apiv1.Cluster) (map[string]interface{}, error) {
+func convertFromCluster(cluster *apiv1.Cluster) (map[string]interface{}, error) {
 	// Marshal cluster to JSON
 	jsonData, err := json.Marshal(cluster)
 	if err != nil {
@@ -99,7 +117,7 @@ func addRWServiceToYaml(c kube.Cluster, resources []map[string]interface{}, migr
 	return nil
 }
 
-func AddClustersetDNS(c kube.Cluster, migrationResources migration.Resources) {
+func addClustersetDNS(c kube.Cluster, migrationResources migration.Resources) {
 	logger.Info("Adding submariner clusterset DNS")
 
 	// Fetch all cnpg clusters
@@ -179,7 +197,7 @@ func createReplicaCluster(c kube.Cluster, originCluster *apiv1.Cluster, migratio
 	return replicaCluster, nil
 }
 
-func CreateReplicaClusters(c kube.Clusters, migrationResources migration.Resources) {
+func createReplicaClusters(c kube.Clusters, migrationResources migration.Resources) {
 	logger.Info("Creating replica cluster")
 
 	// Fetch cnpg clusters from origin
@@ -195,7 +213,7 @@ func CreateReplicaClusters(c kube.Clusters, migrationResources migration.Resourc
 	logger.Info("Creating replica cluster from origin")
 	for _, resource := range resources {
 		// Convert origin cluster to API object
-		originCluster, err := ConvertToCluster(resource)
+		originCluster, err := convertToCluster(resource)
 		exit.OnErrorWithMessage(err, "Error converting origin cluster")
 
 		// Create replica cluster from origin
@@ -204,7 +222,7 @@ func CreateReplicaClusters(c kube.Clusters, migrationResources migration.Resourc
 
 		logger.Debug(fmt.Sprintf("%v", replicaCluster))
 		// Convert replica cluster to data
-		replicaClusterData, err := ConvertFromCluster(replicaCluster)
+		replicaClusterData, err := convertFromCluster(replicaCluster)
 		exit.OnErrorWithMessage(err, "Error converting replica cluster")
 
 		// Create replica cluster
@@ -218,7 +236,7 @@ func CreateReplicaClusters(c kube.Clusters, migrationResources migration.Resourc
 	logger.Info("Created replica clusters")
 }
 
-func ExportRWServices(clusters kube.Clusters, c kube.Cluster, migrationResources migration.Resources) {
+func exportRWServices(clusters kube.Clusters, c kube.Cluster, migrationResources migration.Resources) {
 	logger.Info("Exporting cnpg rw services")
 
 	// Fetch all cnpg clusters
@@ -258,7 +276,7 @@ func DemoteOriginCluster(c kube.Cluster) {
 	logger.Info("Fetched clusters")
 
 	for _, resource := range resources {
-		cluster, err := ConvertToCluster(resource)
+		cluster, err := convertToCluster(resource)
 		exit.OnErrorWithMessage(err, "Error converting origin cluster")
 
 		// Update cluster spec
@@ -298,7 +316,7 @@ func DemoteOriginCluster(c kube.Cluster) {
 		}
 
 		// Convert the updated cluster back to unstructured
-		updatedObj, err := ConvertFromCluster(cluster)
+		updatedObj, err := convertFromCluster(cluster)
 		exit.OnErrorWithMessage(err, "Error converting updated cluster to unstructured")
 
 		// Update the resource
@@ -324,14 +342,14 @@ func DisableReplication(c kube.Cluster) {
 	logger.Info("Fetched clusters")
 
 	for _, resource := range resources {
-		cluster, err := ConvertToCluster(resource)
+		cluster, err := convertToCluster(resource)
 		exit.OnErrorWithMessage(err, "Error converting origin cluster")
 
 		enabled := false
 		cluster.Spec.ReplicaCluster.Enabled = &enabled
 
 		// Convert the updated cluster back to unstructured
-		updatedObj, err := ConvertFromCluster(cluster)
+		updatedObj, err := convertFromCluster(cluster)
 		exit.OnErrorWithMessage(err, "Error converting updated cluster to unstructured")
 
 		// Update the resource
@@ -343,4 +361,18 @@ func DisableReplication(c kube.Cluster) {
 		logger.Info(fmt.Sprintf("Successfully updated cluster %s in namespace %s", cluster.Name, cluster.Namespace))
 	}
 	logger.Info("Completed demoting clusters")
+}
+
+func scanExistingDatabases(c kube.Cluster) bool {
+	resources, err := c.FetchCustomResources(
+		"postgresql.cnpg.io",
+		"v1",
+		"clusters",
+	)
+	exit.OnErrorWithMessage(err, "Error fetching custom resources")
+
+	if len(resources) == 0 {
+		return false
+	}
+	return true
 }
