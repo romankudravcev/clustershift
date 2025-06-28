@@ -59,6 +59,9 @@ func (c Cluster) CreateResource(resourceType ResourceType, name, namespace strin
 	case ClusterRoleBind:
 		_, err := c.Clientset.RbacV1().ClusterRoleBindings().Create(context.TODO(), resource.(*rbacv1.ClusterRoleBinding), metav1.CreateOptions{})
 		return err
+	case StatefulSet:
+		_, err := c.Clientset.AppsV1().StatefulSets(namespace).Create(context.TODO(), resource.(*appsv1.StatefulSet), metav1.CreateOptions{})
+		return err
 	case Middleware:
 		_, err := c.TraefikClientset.TraefikV1alpha1().Middlewares(namespace).Create(context.TODO(), resource.(*traefikv1alpha1.Middleware), metav1.CreateOptions{})
 		return err
