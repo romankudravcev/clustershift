@@ -344,3 +344,17 @@ func DisableReplication(c kube.Cluster) {
 	}
 	logger.Info("Completed demoting clusters")
 }
+
+func ScanExistingDatabases(c kube.Cluster) bool {
+	resources, err := c.FetchCustomResources(
+		"postgresql.cnpg.io",
+		"v1",
+		"clusters",
+	)
+	exit.OnErrorWithMessage(err, "Error fetching custom resources")
+
+	if len(resources) == 0 {
+		return false
+	}
+	return true
+}
