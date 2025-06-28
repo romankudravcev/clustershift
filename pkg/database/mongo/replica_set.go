@@ -57,21 +57,6 @@ rs.reconfig(cfg, {force: true});
 	return nil
 }
 
-// stepDownMongoPrimary forces the current primary to step down
-func stepDownMongoPrimary(c kube.Cluster, podName, namespace string) error {
-	var out, errOut bytes.Buffer
-
-	command := []string{mongoshCommand, "--eval", fmt.Sprintf("rs.stepDown(%d, %d, true);", stepDownDuration, stepDownDuration)}
-	err := c.ExecIntoPod(namespace, podName, command, &out, &errOut)
-	if err != nil {
-		return fmt.Errorf("failed to step down MongoDB primary: %w, stderr: %s", err, errOut.String())
-	}
-	if errOut.Len() > 0 {
-		return fmt.Errorf("mongosh error during step down: %s", errOut.String())
-	}
-	return nil
-}
-
 // waitForMongoMemberSecondary waits for a MongoDB member to become SECONDARY
 func waitForMongoMemberSecondary(c kube.Cluster, podName, namespace, host string) error {
 	timeout := defaultTimeout
@@ -111,38 +96,6 @@ func overwriteMongoHosts(c kube.Cluster, podName, namespace string, newHosts []s
 		return fmt.Errorf("mongosh error: %s", errOut.String())
 	}
 	return nil
-}
-
-// waitForNewPrimaryElection waits for a new primary to be elected from target members
-func waitForNewPrimaryElection(c kube.Cluster, podName, namespace string, targetHosts []string) error {
-	timeout := defaultTimeout
-	interval := defaultCheckInterval
-	deadline := time.Now().Add(timeout)
-
-	logger.Info("Waiting for new primary to be elected from target members...")
-
-	for time.Now().Before(deadline) {
-		newPrimary, err := getPrimaryMongoHost(c, podName, namespace)
-		if err != nil {
-			// If we can't get primary from origin, try from target cluster
-			logger.Debug(fmt.Sprintf("Could not get primary from origin cluster: %v", err))
-			time.Sleep(interval)
-			continue
-		}
-
-		// Check if the new primary is one of our target hosts
-		for _, targetHost := range targetHosts {
-			if newPrimary == targetHost {
-				logger.Info(fmt.Sprintf("New primary elected successfully: %s", newPrimary))
-				return nil
-			}
-		}
-
-		logger.Debug(fmt.Sprintf("Current primary %s is not from target cluster, waiting...", newPrimary))
-		time.Sleep(interval)
-	}
-
-	return fmt.Errorf("new primary was not elected from target members within %v", timeout)
 }
 
 // waitForTargetPrimaryElection waits for a primary to be elected from target cluster
