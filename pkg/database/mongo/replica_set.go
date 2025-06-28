@@ -3,7 +3,9 @@ package mongo
 import (
 	"bytes"
 	"clustershift/internal/kube"
+	"clustershift/internal/logger"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -109,4 +111,86 @@ func overwriteMongoHosts(c kube.Cluster, podName, namespace string, newHosts []s
 		return fmt.Errorf("mongosh error: %s", errOut.String())
 	}
 	return nil
+}
+
+// waitForNewPrimaryElection waits for a new primary to be elected from target members
+func waitForNewPrimaryElection(c kube.Cluster, podName, namespace string, targetHosts []string) error {
+	timeout := defaultTimeout
+	interval := defaultCheckInterval
+	deadline := time.Now().Add(timeout)
+
+	logger.Info("Waiting for new primary to be elected from target members...")
+
+	for time.Now().Before(deadline) {
+		newPrimary, err := getPrimaryMongoHost(c, podName, namespace)
+		if err != nil {
+			// If we can't get primary from origin, try from target cluster
+			logger.Debug(fmt.Sprintf("Could not get primary from origin cluster: %v", err))
+			time.Sleep(interval)
+			continue
+		}
+
+		// Check if the new primary is one of our target hosts
+		for _, targetHost := range targetHosts {
+			if newPrimary == targetHost {
+				logger.Info(fmt.Sprintf("New primary elected successfully: %s", newPrimary))
+				return nil
+			}
+		}
+
+		logger.Debug(fmt.Sprintf("Current primary %s is not from target cluster, waiting...", newPrimary))
+		time.Sleep(interval)
+	}
+
+	return fmt.Errorf("new primary was not elected from target members within %v", timeout)
+}
+
+// waitForTargetPrimaryElection waits for a primary to be elected from target cluster
+func waitForTargetPrimaryElection(c kube.Clusters, ctx *MigrationContext) error {
+	// Try to get primary from target cluster first, fallback to origin
+	var primaryCheckCluster kube.Cluster
+	var podName string
+
+	// If we have target hosts, try to use the first target host for checking
+	if len(ctx.TargetHosts) > 0 {
+		primaryCheckCluster = c.Target
+		// Extract pod name from target host (assuming format like "pod-name.service.namespace")
+		parts := strings.Split(ctx.TargetHosts[0], ".")
+		if len(parts) > 0 {
+			podName = parts[0]
+		} else {
+			podName = ctx.TargetHosts[0]
+		}
+	} else {
+		primaryCheckCluster = c.Origin
+		podName = ctx.PrimaryHost
+	}
+
+	timeout := defaultTimeout
+	interval := defaultCheckInterval
+	deadline := time.Now().Add(timeout)
+
+	logger.Info("Waiting for new primary to be elected from target cluster...")
+
+	for time.Now().Before(deadline) {
+		newPrimary, err := getPrimaryMongoHost(primaryCheckCluster, podName, ctx.StatefulSet.Namespace)
+		if err != nil {
+			logger.Debug(fmt.Sprintf("Could not determine current primary: %v, retrying...", err))
+			time.Sleep(interval)
+			continue
+		}
+
+		// Check if the new primary is one of our target hosts
+		for _, targetHost := range ctx.TargetHosts {
+			if strings.Contains(newPrimary, strings.Split(targetHost, ".")[0]) {
+				logger.Info(fmt.Sprintf("New primary elected successfully from target cluster: %s", newPrimary))
+				return nil
+			}
+		}
+
+		logger.Debug(fmt.Sprintf("Current primary %s is not from target cluster, waiting...", newPrimary))
+		time.Sleep(interval)
+	}
+
+	return fmt.Errorf("new primary was not elected from target cluster within %v", timeout)
 }

@@ -85,6 +85,10 @@ func migrateStatefulSet(ctx *MigrationContext, c kube.Clusters, resources migrat
 		return fmt.Errorf("failed to transfer primary: %w", err)
 	}
 
+	if err := waitForTargetPrimaryElection(c, ctx); err != nil {
+		return fmt.Errorf("failed to wait for new primary election: %w", err)
+	}
+
 	if err := removeOriginMembers(ctx, c); err != nil {
 		return fmt.Errorf("failed to remove origin members: %w", err)
 	}
@@ -120,9 +124,8 @@ func addTargetMembersToReplicaSet(ctx *MigrationContext, c kube.Clusters) error 
 		}
 	}
 
-	// Wait for the first target member to become secondary
-	if len(ctx.TargetHosts) > 0 {
-		if err := waitForMongoMemberSecondary(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace, ctx.TargetHosts[0]); err != nil {
+	for _, targetHost := range ctx.TargetHosts {
+		if err := waitForMongoMemberSecondary(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace, targetHost); err != nil {
 			return fmt.Errorf("failed to wait for target member to become SECONDARY: %w", err)
 		}
 	}
@@ -139,16 +142,11 @@ func transferPrimary(ctx *MigrationContext, c kube.Clusters) error {
 		}
 	}
 
-	// Demote origin members
-	for _, originHost := range ctx.OriginHosts {
+	// Demote origin members (current primary steps down)
+	for _, originHost := range ctx.UpdatedHosts {
 		if err := demoteMember(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace, originHost); err != nil {
 			return fmt.Errorf("failed to demote origin member %s: %w", originHost, err)
 		}
-	}
-
-	// Step down primary
-	if err := stepDownMongoPrimary(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace); err != nil {
-		return fmt.Errorf("failed to step down MongoDB primary: %w", err)
 	}
 
 	return nil
@@ -156,8 +154,11 @@ func transferPrimary(ctx *MigrationContext, c kube.Clusters) error {
 
 // removeOriginMembers removes all origin members from the MongoDB replica set
 func removeOriginMembers(ctx *MigrationContext, c kube.Clusters) error {
+	currentPrimary, err := getPrimaryMongoHost(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace)
+	exit.OnErrorWithMessage(err, "failed to get current primary host")
+
 	for _, originHost := range ctx.UpdatedHosts {
-		if err := removeMongoMember(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace, originHost); err != nil {
+		if err := removeMongoMember(c.Target, currentPrimary, ctx.StatefulSet.Namespace, originHost); err != nil {
 			return fmt.Errorf("failed to remove member %s from replicaSet: %w", originHost, err)
 		}
 	}
