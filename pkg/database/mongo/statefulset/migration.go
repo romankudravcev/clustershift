@@ -1,4 +1,4 @@
-package mongo
+package statefulset
 
 import (
 	"clustershift/internal/exit"

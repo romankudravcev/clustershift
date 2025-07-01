@@ -1,4 +1,4 @@
-package mongo
+package statefulset
 
 import (
 	"bytes"
@@ -116,4 +116,25 @@ func isMongoMemberSecondary(c kube.Cluster, podName, namespace, host string) (bo
 		}
 	}
 	return false, nil
+}
+
+func CreateSyncUser(c kube.Cluster, name, namespace string) error {
+	script := `
+use admin
+
+db.createUser({
+  user: "clusteradmin",
+  pwd: "password1", 
+  roles: [
+    { role: "clusterAdmin", db: "admin" },
+    { role: "readWriteAnyDatabase", db: "admin" },
+    { role: "dbAdminAnyDatabase", db: "admin" },
+    { role: "restore", db: "admin" },
+    { role: "backup", db: "admin" },
+    { role: "root", db: "admin" }
+  ]
+})
+`
+
+	return execMongoCommand(c, name, namespace, script)
 }
