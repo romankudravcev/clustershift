@@ -71,19 +71,19 @@ func setupTargetResources(ctx *mongo.MigrationContext, c kube.Clusters) error {
 	statefulSetInterface = kube.CleanResourceForCreation(statefulSetInterface)
 	statefulSet = *statefulSetInterface.(*appsv1.StatefulSet)
 
-	if err := createResourceIfNotExists(c.Target, kube.Service, service.Namespace, &service); err != nil {
+	if err := CreateResourceIfNotExists(c.Target, kube.Service, service.Namespace, &service); err != nil {
 		return fmt.Errorf("failed to create service %s in target cluster: %w", service.Name, err)
 	}
 
-	if err := createResourceIfNotExists(c.Target, kube.StatefulSet, statefulSet.Namespace, &statefulSet); err != nil {
+	if err := CreateResourceIfNotExists(c.Target, kube.StatefulSet, statefulSet.Namespace, &statefulSet); err != nil {
 		return fmt.Errorf("failed to create StatefulSet %s in target cluster: %w", statefulSet.Name, err)
 	}
 
 	return nil
 }
 
-// createResourceIfNotExists creates a resource if it doesn't already exist
-func createResourceIfNotExists(cluster kube.Cluster, resourceType kube.ResourceType, namespace string, resource interface{}) error {
+// CreateResourceIfNotExists creates a resource if it doesn't already exist
+func CreateResourceIfNotExists(cluster kube.Cluster, resourceType kube.ResourceType, namespace string, resource interface{}) error {
 	err := cluster.CreateResource(resourceType, namespace, resource)
 	if err != nil {
 		if k8serrors.IsAlreadyExists(err) || strings.Contains(err.Error(), "already exists") {
