@@ -21,13 +21,16 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 		return
 	}
 
+	mongoClientOrigin := NewMongoClient(c.Origin, "default")
+	mongoClientTarget := NewMongoClient(c.Target, "default")
+
 	for _, statefulSet := range statefulSets {
-		ctx, err := prepareMigrationContext(statefulSet, c, resources)
+		ctx, err := prepareMigrationContext(statefulSet, c, resources, mongoClientOrigin)
 		if err != nil {
 			exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to prepare migration context for StatefulSet %s", statefulSet.Name))
 		}
 
-		err = migrateStatefulSet(ctx, c, resources)
+		err = migrateStatefulSet(ctx, c, resources, mongoClientOrigin, mongoClientTarget)
 		if err != nil {
 			exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to migrate StatefulSet %s", statefulSet.Name))
 		}
@@ -35,18 +38,18 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 }
 
 // prepareMigrationContext prepares the migration context for a StatefulSet
-func prepareMigrationContext(statefulSet appsv1.StatefulSet, c kube.Clusters, resources migration.Resources) (*MigrationContext, error) {
+func prepareMigrationContext(statefulSet appsv1.StatefulSet, c kube.Clusters, resources migration.Resources, mongoClientOrigin *MongoClient) (*MigrationContext, error) {
 	service, err := getServiceForStatefulSet(statefulSet, c.Origin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get service for StatefulSet %s: %w", statefulSet.Name, err)
 	}
 
-	primaryHost, err := getPrimaryMongoHost(c.Origin, statefulSet.Name+"-0", statefulSet.Namespace)
+	primaryHost, err := GetPrimaryMongoHost(mongoClientOrigin, service.Name+".svc."+service.Namespace+".cluster.local")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get primary MongoDB host for StatefulSet %s: %w", statefulSet.Name, err)
 	}
 
-	originHosts, err := getMongoHosts(c.Origin, primaryHost, statefulSet.Namespace)
+	originHosts, err := GetMongoHosts(mongoClientOrigin, service.Name+".svc."+service.Namespace+".cluster.local")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get MongoDB hosts for StatefulSet %s: %w", statefulSet.Name, err)
 	}
@@ -58,13 +61,13 @@ func prepareMigrationContext(statefulSet appsv1.StatefulSet, c kube.Clusters, re
 		Service:      service,
 		PrimaryHost:  primaryHost,
 		OriginHosts:  originHosts,
-		UpdatedHosts: updateMongoHosts(originHosts, resources, service, c.Origin),
-		TargetHosts:  updateMongoHosts(originHosts, resources, service, c.Target),
+		UpdatedHosts: UpdateMongoHosts(originHosts, resources, service, c.Origin),
+		TargetHosts:  UpdateMongoHosts(originHosts, resources, service, c.Target),
 	}, nil
 }
 
 // migrateStatefulSet performs the complete migration of a MongoDB StatefulSet
-func migrateStatefulSet(ctx *MigrationContext, c kube.Clusters, resources migration.Resources) error {
+func migrateStatefulSet(ctx *MigrationContext, c kube.Clusters, resources migration.Resources, mongoClientOrigin, mongoClientTarget *MongoClient) error {
 	if err := setupTargetResources(ctx, c); err != nil {
 		return fmt.Errorf("failed to setup target resources: %w", err)
 	}
@@ -72,24 +75,23 @@ func migrateStatefulSet(ctx *MigrationContext, c kube.Clusters, resources migrat
 	if err := configureNetworking(ctx, c, resources); err != nil {
 		return fmt.Errorf("failed to configure networking: %w", err)
 	}
-
-	if err := updateOriginHosts(ctx, c); err != nil {
+	if err := updateOriginHosts(ctx, mongoClientOrigin); err != nil {
 		return fmt.Errorf("failed to update origin hosts: %w", err)
 	}
 
-	if err := addTargetMembersToReplicaSet(ctx, c); err != nil {
+	if err := addTargetMembersToReplicaSet(ctx, mongoClientOrigin); err != nil {
 		return fmt.Errorf("failed to add target members to replica set: %w", err)
 	}
 
-	if err := transferPrimary(ctx, c); err != nil {
+	if err := transferPrimary(ctx, mongoClientOrigin); err != nil {
 		return fmt.Errorf("failed to transfer primary: %w", err)
 	}
 
-	if err := waitForTargetPrimaryElection(c, ctx); err != nil {
+	if err := waitForTargetPrimaryElection(mongoClientOrigin, ctx); err != nil {
 		return fmt.Errorf("failed to wait for new primary election: %w", err)
 	}
 
-	if err := removeOriginMembers(ctx, c); err != nil {
+	if err := removeOriginMembers(ctx, mongoClientOrigin, mongoClientTarget); err != nil {
 		return fmt.Errorf("failed to remove origin members: %w", err)
 	}
 
@@ -110,22 +112,22 @@ func configureNetworking(ctx *MigrationContext, c kube.Clusters, resources migra
 }
 
 // updateOriginHosts updates the MongoDB hosts configuration in the origin cluster
-func updateOriginHosts(ctx *MigrationContext, c kube.Clusters) error {
+func updateOriginHosts(ctx *MigrationContext, client *MongoClient) error {
 	logger.Debug(fmt.Sprintf("Updated MongoDB hosts for StatefulSet %s: %v", ctx.StatefulSet.Name, ctx.UpdatedHosts))
 
-	return overwriteMongoHosts(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace, ctx.UpdatedHosts)
+	return overwriteMongoHosts(client, ctx.PrimaryHost, ctx.UpdatedHosts)
 }
 
 // addTargetMembersToReplicaSet adds all target members to the MongoDB replica set
-func addTargetMembersToReplicaSet(ctx *MigrationContext, c kube.Clusters) error {
+func addTargetMembersToReplicaSet(ctx *MigrationContext, client *MongoClient) error {
 	for _, targetHost := range ctx.TargetHosts {
-		if err := addMongoMember(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace, targetHost); err != nil {
+		if err := addMongoMember(client, ctx.PrimaryHost, targetHost); err != nil {
 			return fmt.Errorf("failed to add target member %s to origin replica set: %w", targetHost, err)
 		}
 	}
 
 	for _, targetHost := range ctx.TargetHosts {
-		if err := waitForMongoMemberSecondary(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace, targetHost); err != nil {
+		if err := waitForMongoMemberSecondary(client, ctx.PrimaryHost, targetHost); err != nil {
 			return fmt.Errorf("failed to wait for target member to become SECONDARY: %w", err)
 		}
 	}
@@ -134,17 +136,17 @@ func addTargetMembersToReplicaSet(ctx *MigrationContext, c kube.Clusters) error 
 }
 
 // transferPrimary promotes target members and demotes origin members
-func transferPrimary(ctx *MigrationContext, c kube.Clusters) error {
+func transferPrimary(ctx *MigrationContext, client *MongoClient) error {
 	// Promote target members
 	for _, targetHost := range ctx.TargetHosts {
-		if err := promoteMember(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace, targetHost); err != nil {
+		if err := promoteMember(client, ctx.PrimaryHost, targetHost); err != nil {
 			return fmt.Errorf("failed to promote target member %s: %w", targetHost, err)
 		}
 	}
 
 	// Demote origin members (current primary steps down)
 	for _, originHost := range ctx.UpdatedHosts {
-		if err := demoteMember(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace, originHost); err != nil {
+		if err := demoteMember(client, ctx.PrimaryHost, originHost); err != nil {
 			return fmt.Errorf("failed to demote origin member %s: %w", originHost, err)
 		}
 	}
@@ -153,12 +155,12 @@ func transferPrimary(ctx *MigrationContext, c kube.Clusters) error {
 }
 
 // removeOriginMembers removes all origin members from the MongoDB replica set
-func removeOriginMembers(ctx *MigrationContext, c kube.Clusters) error {
-	currentPrimary, err := getPrimaryMongoHost(c.Origin, ctx.PrimaryHost, ctx.StatefulSet.Namespace)
+func removeOriginMembers(ctx *MigrationContext, clientOrigin, clientTarget *MongoClient) error {
+	currentPrimary, err := GetPrimaryMongoHost(clientOrigin, ctx.PrimaryHost)
 	exit.OnErrorWithMessage(err, "failed to get current primary host")
 
 	for _, originHost := range ctx.UpdatedHosts {
-		if err := removeMongoMember(c.Target, currentPrimary, ctx.StatefulSet.Namespace, originHost); err != nil {
+		if err := removeMongoMember(clientTarget, currentPrimary, originHost); err != nil {
 			return fmt.Errorf("failed to remove member %s from replicaSet: %w", originHost, err)
 		}
 	}

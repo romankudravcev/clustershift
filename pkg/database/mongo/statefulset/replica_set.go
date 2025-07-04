@@ -1,40 +1,36 @@
 package statefulset
 
 import (
-	"bytes"
-	"clustershift/internal/kube"
 	"clustershift/internal/logger"
 	"fmt"
 	"strings"
 	"time"
 )
 
-// addMongoMember adds a new member to the MongoDB replica set
-func addMongoMember(origin kube.Cluster, name, namespace, host string) error {
-	script := fmt.Sprintf("rs.add('%s');", host)
-	return execMongoCommand(origin, name, namespace, script)
+// addMongoMember adds a new member to the MongoDB replica set using client pod
+func addMongoMember(client *MongoClient, mongoHost, newHost string) error {
+	script := fmt.Sprintf("rs.add('%s');", newHost)
+	return execMongoCommand(client, mongoHost, script)
 }
 
-// removeMongoMember removes a member from the MongoDB replica set
-func removeMongoMember(cluster kube.Cluster, podName string, namespace string, host string) error {
-	script := fmt.Sprintf(`rs.remove("%s");`, host)
-	return execMongoCommand(cluster, podName, namespace, script)
+// removeMongoMember removes a member from the MongoDB replica set using client pod
+func removeMongoMember(client *MongoClient, mongoHost, hostToRemove string) error {
+	script := fmt.Sprintf(`rs.remove("%s");`, hostToRemove)
+	return execMongoCommand(client, mongoHost, script)
 }
 
-// promoteMember promotes a MongoDB replica set member to primary
-func promoteMember(c kube.Cluster, podName, namespace, host string) error {
-	return setPriorityForMember(c, podName, namespace, host, highPriority)
+// promoteMember promotes a MongoDB replica set member to primary using client pod
+func promoteMember(client *MongoClient, mongoHost, host string) error {
+	return setPriorityForMember(client, mongoHost, host, highPriority)
 }
 
-// demoteMember demotes a MongoDB replica set member from primary
-func demoteMember(c kube.Cluster, podName, namespace, host string) error {
-	return setPriorityForMember(c, podName, namespace, host, lowPriority)
+// demoteMember demotes a MongoDB replica set member from primary using client pod
+func demoteMember(client *MongoClient, mongoHost, host string) error {
+	return setPriorityForMember(client, mongoHost, host, lowPriority)
 }
 
-// setPriorityForMember sets the priority for a MongoDB replica set member
-func setPriorityForMember(c kube.Cluster, podName, namespace, host string, priority int) error {
-	var out, errOut bytes.Buffer
-
+// setPriorityForMember sets the priority for a MongoDB replica set member using client pod
+func setPriorityForMember(client *MongoClient, mongoHost, host string, priority int) error {
 	script := fmt.Sprintf(`
 cfg = rs.conf();
 for (var i = 0; i < cfg.members.length; i++) {
@@ -45,26 +41,17 @@ for (var i = 0; i < cfg.members.length; i++) {
 rs.reconfig(cfg, {force: true});
 `, host, priority)
 
-	command := []string{mongoshCommand, "--eval", script}
-	err := c.ExecIntoPod(namespace, podName, command, &out, &errOut)
-	if err != nil {
-		return fmt.Errorf("failed to set priority %d for member %s: %w, stderr: %s", priority, host, err, errOut.String())
-	}
-	if errOut.Len() > 0 {
-		return fmt.Errorf("mongosh error while setting priority: %s", errOut.String())
-	}
-
-	return nil
+	return execMongoCommand(client, mongoHost, script)
 }
 
-// waitForMongoMemberSecondary waits for a MongoDB member to become SECONDARY
-func waitForMongoMemberSecondary(c kube.Cluster, podName, namespace, host string) error {
+// waitForMongoMemberSecondary waits for a MongoDB member to become SECONDARY using client pod
+func waitForMongoMemberSecondary(client *MongoClient, mongoHost, targetHost string) error {
 	timeout := defaultTimeout
 	interval := defaultCheckInterval
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {
-		ready, err := isMongoMemberSecondary(c, podName, namespace, host)
+		ready, err := isMongoMemberSecondary(client, mongoHost, targetHost)
 		if err != nil {
 			return err
 		}
@@ -73,50 +60,30 @@ func waitForMongoMemberSecondary(c kube.Cluster, podName, namespace, host string
 		}
 		time.Sleep(interval)
 	}
-	return fmt.Errorf("member %s did not become SECONDARY within %v", host, timeout)
+	return fmt.Errorf("member %s did not become SECONDARY within %v", targetHost, timeout)
 }
 
-// overwriteMongoHosts updates the MongoDB replica set configuration with new hosts
-func overwriteMongoHosts(c kube.Cluster, podName, namespace string, newHosts []string) error {
-	var out, errOut bytes.Buffer
-
+// overwriteMongoHosts updates the MongoDB replica set configuration with new hosts using client pod
+func overwriteMongoHosts(client *MongoClient, mongoHost string, newHosts []string) error {
 	script := "cfg = rs.conf();"
 	for i, host := range newHosts {
 		script += fmt.Sprintf(`cfg.members[%d].host = "%s";`, i, host)
 	}
 	script += "rs.reconfig(cfg);"
 
-	command := []string{mongoshCommand, "--eval", script}
-
-	err := c.ExecIntoPod(namespace, podName, command, &out, &errOut)
-	if err != nil {
-		return fmt.Errorf("failed to exec into pod: %w, stderr: %s", err, errOut.String())
-	}
-	if errOut.Len() > 0 {
-		return fmt.Errorf("mongosh error: %s", errOut.String())
-	}
-	return nil
+	return execMongoCommand(client, mongoHost, script)
 }
 
-// waitForTargetPrimaryElection waits for a primary to be elected from target cluster
-func waitForTargetPrimaryElection(c kube.Clusters, ctx *MigrationContext) error {
-	// Try to get primary from target cluster first, fallback to origin
-	var primaryCheckCluster kube.Cluster
-	var podName string
-
-	// If we have target hosts, try to use the first target host for checking
+// waitForTargetPrimaryElection waits for a primary to be elected from target cluster using client pod
+func waitForTargetPrimaryElection(client *MongoClient, ctx *MigrationContext) error {
+	// Use the first available host for checking primary status
+	var checkHost string
 	if len(ctx.TargetHosts) > 0 {
-		primaryCheckCluster = c.Target
-		// Extract pod name from target host (assuming format like "pod-name.service.namespace")
-		parts := strings.Split(ctx.TargetHosts[0], ".")
-		if len(parts) > 0 {
-			podName = parts[0]
-		} else {
-			podName = ctx.TargetHosts[0]
-		}
+		checkHost = ctx.TargetHosts[0]
+	} else if len(ctx.OriginHosts) > 0 {
+		checkHost = ctx.OriginHosts[0]
 	} else {
-		primaryCheckCluster = c.Origin
-		podName = ctx.PrimaryHost
+		return fmt.Errorf("no hosts available for checking primary status")
 	}
 
 	timeout := defaultTimeout
@@ -126,7 +93,7 @@ func waitForTargetPrimaryElection(c kube.Clusters, ctx *MigrationContext) error 
 	logger.Info("Waiting for new primary to be elected from target cluster...")
 
 	for time.Now().Before(deadline) {
-		newPrimary, err := getPrimaryMongoHost(primaryCheckCluster, podName, ctx.StatefulSet.Namespace)
+		newPrimary, err := GetPrimaryMongoHost(client, checkHost)
 		if err != nil {
 			logger.Debug(fmt.Sprintf("Could not determine current primary: %v, retrying...", err))
 			time.Sleep(interval)
