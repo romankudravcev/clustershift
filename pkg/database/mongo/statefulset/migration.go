@@ -5,6 +5,7 @@ import (
 	"clustershift/internal/kube"
 	"clustershift/internal/logger"
 	"clustershift/internal/migration"
+	"clustershift/internal/mongo"
 	"clustershift/internal/prompt"
 	"clustershift/pkg/skupper"
 	"fmt"
@@ -21,8 +22,8 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 		return
 	}
 
-	mongoClientOrigin := NewMongoClient(c.Origin, "default")
-	mongoClientTarget := NewMongoClient(c.Target, "default")
+	mongoClientOrigin := mongo.NewMongoClient(c.Origin, "default")
+	mongoClientTarget := mongo.NewMongoClient(c.Target, "default")
 
 	for _, statefulSet := range statefulSets {
 		ctx, err := prepareMigrationContext(statefulSet, c, resources, mongoClientOrigin)
@@ -38,25 +39,25 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 }
 
 // prepareMigrationContext prepares the migration context for a StatefulSet
-func prepareMigrationContext(statefulSet appsv1.StatefulSet, c kube.Clusters, resources migration.Resources, mongoClientOrigin *MongoClient) (*MigrationContext, error) {
+func prepareMigrationContext(statefulSet appsv1.StatefulSet, c kube.Clusters, resources migration.Resources, mongoClientOrigin *mongo.Client) (*mongo.MigrationContext, error) {
 	service, err := getServiceForStatefulSet(statefulSet, c.Origin)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get service for StatefulSet %s: %w", statefulSet.Name, err)
 	}
 
-	primaryHost, err := GetPrimaryMongoHost(mongoClientOrigin, service.Name+".svc."+service.Namespace+".cluster.local")
+	primaryHost, err := mongo.GetPrimaryMongoHost(mongoClientOrigin, service.Name+".svc."+service.Namespace+".cluster.local")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get primary MongoDB host for StatefulSet %s: %w", statefulSet.Name, err)
 	}
 
-	originHosts, err := GetMongoHosts(mongoClientOrigin, service.Name+".svc."+service.Namespace+".cluster.local")
+	originHosts, err := mongo.GetMongoHosts(mongoClientOrigin, service.Name+".svc."+service.Namespace+".cluster.local")
 	if err != nil {
 		return nil, fmt.Errorf("failed to get MongoDB hosts for StatefulSet %s: %w", statefulSet.Name, err)
 	}
 
 	logger.Debug(fmt.Sprintf("MongoDB hosts for StatefulSet %s: %v", statefulSet.Name, originHosts))
 
-	return &MigrationContext{
+	return &mongo.MigrationContext{
 		StatefulSet:  statefulSet,
 		Service:      service,
 		PrimaryHost:  primaryHost,
@@ -67,7 +68,7 @@ func prepareMigrationContext(statefulSet appsv1.StatefulSet, c kube.Clusters, re
 }
 
 // migrateStatefulSet performs the complete migration of a MongoDB StatefulSet
-func migrateStatefulSet(ctx *MigrationContext, c kube.Clusters, resources migration.Resources, mongoClientOrigin, mongoClientTarget *MongoClient) error {
+func migrateStatefulSet(ctx *mongo.MigrationContext, c kube.Clusters, resources migration.Resources, mongoClientOrigin, mongoClientTarget *mongo.Client) error {
 	if err := setupTargetResources(ctx, c); err != nil {
 		return fmt.Errorf("failed to setup target resources: %w", err)
 	}
@@ -87,7 +88,7 @@ func migrateStatefulSet(ctx *MigrationContext, c kube.Clusters, resources migrat
 		return fmt.Errorf("failed to transfer primary: %w", err)
 	}
 
-	if err := waitForTargetPrimaryElection(mongoClientOrigin, ctx); err != nil {
+	if err := mongo.WaitForTargetPrimaryElection(mongoClientOrigin, ctx); err != nil {
 		return fmt.Errorf("failed to wait for new primary election: %w", err)
 	}
 
@@ -100,7 +101,7 @@ func migrateStatefulSet(ctx *MigrationContext, c kube.Clusters, resources migrat
 }
 
 // configureNetworking sets up service exports for cross-cluster communication
-func configureNetworking(ctx *MigrationContext, c kube.Clusters, resources migration.Resources) error {
+func configureNetworking(ctx *mongo.MigrationContext, c kube.Clusters, resources migration.Resources) error {
 	if resources.GetNetworkingTool() == prompt.NetworkingToolSkupper {
 		skupper.CreateSiteConnection(c, ctx.Service.Namespace)
 	}
@@ -112,22 +113,22 @@ func configureNetworking(ctx *MigrationContext, c kube.Clusters, resources migra
 }
 
 // updateOriginHosts updates the MongoDB hosts configuration in the origin cluster
-func updateOriginHosts(ctx *MigrationContext, client *MongoClient) error {
+func updateOriginHosts(ctx *mongo.MigrationContext, client *mongo.Client) error {
 	logger.Debug(fmt.Sprintf("Updated MongoDB hosts for StatefulSet %s: %v", ctx.StatefulSet.Name, ctx.UpdatedHosts))
 
-	return overwriteMongoHosts(client, ctx.PrimaryHost, ctx.UpdatedHosts)
+	return mongo.OverwriteMongoHosts(client, ctx.PrimaryHost, ctx.UpdatedHosts)
 }
 
 // addTargetMembersToReplicaSet adds all target members to the MongoDB replica set
-func addTargetMembersToReplicaSet(ctx *MigrationContext, client *MongoClient) error {
+func addTargetMembersToReplicaSet(ctx *mongo.MigrationContext, client *mongo.Client) error {
 	for _, targetHost := range ctx.TargetHosts {
-		if err := addMongoMember(client, ctx.PrimaryHost, targetHost); err != nil {
+		if err := mongo.AddMongoMember(client, ctx.PrimaryHost, targetHost); err != nil {
 			return fmt.Errorf("failed to add target member %s to origin replica set: %w", targetHost, err)
 		}
 	}
 
 	for _, targetHost := range ctx.TargetHosts {
-		if err := waitForMongoMemberSecondary(client, ctx.PrimaryHost, targetHost); err != nil {
+		if err := mongo.WaitForMongoMemberSecondary(client, ctx.PrimaryHost, targetHost); err != nil {
 			return fmt.Errorf("failed to wait for target member to become SECONDARY: %w", err)
 		}
 	}
@@ -136,17 +137,17 @@ func addTargetMembersToReplicaSet(ctx *MigrationContext, client *MongoClient) er
 }
 
 // transferPrimary promotes target members and demotes origin members
-func transferPrimary(ctx *MigrationContext, client *MongoClient) error {
+func transferPrimary(ctx *mongo.MigrationContext, client *mongo.Client) error {
 	// Promote target members
 	for _, targetHost := range ctx.TargetHosts {
-		if err := promoteMember(client, ctx.PrimaryHost, targetHost); err != nil {
+		if err := mongo.PromoteMember(client, ctx.PrimaryHost, targetHost); err != nil {
 			return fmt.Errorf("failed to promote target member %s: %w", targetHost, err)
 		}
 	}
 
 	// Demote origin members (current primary steps down)
 	for _, originHost := range ctx.UpdatedHosts {
-		if err := demoteMember(client, ctx.PrimaryHost, originHost); err != nil {
+		if err := mongo.DemoteMember(client, ctx.PrimaryHost, originHost); err != nil {
 			return fmt.Errorf("failed to demote origin member %s: %w", originHost, err)
 		}
 	}
@@ -155,12 +156,12 @@ func transferPrimary(ctx *MigrationContext, client *MongoClient) error {
 }
 
 // removeOriginMembers removes all origin members from the MongoDB replica set
-func removeOriginMembers(ctx *MigrationContext, clientOrigin, clientTarget *MongoClient) error {
-	currentPrimary, err := GetPrimaryMongoHost(clientOrigin, ctx.PrimaryHost)
+func removeOriginMembers(ctx *mongo.MigrationContext, clientOrigin, clientTarget *mongo.Client) error {
+	currentPrimary, err := mongo.GetPrimaryMongoHost(clientOrigin, ctx.PrimaryHost)
 	exit.OnErrorWithMessage(err, "failed to get current primary host")
 
 	for _, originHost := range ctx.UpdatedHosts {
-		if err := removeMongoMember(clientTarget, currentPrimary, originHost); err != nil {
+		if err := mongo.RemoveMongoMember(clientTarget, currentPrimary, originHost); err != nil {
 			return fmt.Errorf("failed to remove member %s from replicaSet: %w", originHost, err)
 		}
 	}
