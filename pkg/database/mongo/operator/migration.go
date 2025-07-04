@@ -7,6 +7,7 @@ import (
 	"clustershift/internal/kube"
 	"clustershift/internal/logger"
 	"clustershift/internal/migration"
+	"clustershift/internal/mongo"
 	"clustershift/pkg/database/mongo/statefulset"
 	"context"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reflect"
 	"strings"
+	"time"
 )
 
 const mongoImage = "mongodb/mongodb-kubernetes-operator"
@@ -40,12 +42,19 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 
 	logger.Debug(fmt.Sprintf("Found MongoDB Community Operator version %s in namespace %s", operatorInfo.Version, operatorInfo.Namespace))
 	deployOperatorToTarget(c.Target, operatorInfo)
-
 	mongoDBs, err := scanExistingDatabases(c.Origin)
 	exit.OnErrorWithMessage(err, "Failed to scan existing MongoDB databases")
 	logger.Debug(fmt.Sprintf("Found %d MongoDB databases in origin cluster", len(mongoDBs)))
 
+	if len(mongoDBs) == 0 {
+		logger.Info("No existing MongoDB databases found in origin cluster, skipping migration")
+		return
+	}
+	mongoClientOrigin := mongo.NewMongoClient(c.Origin, "default")
+	mongoClientTarget := mongo.NewMongoClient(c.Target, "default")
+
 	for _, mongoDB := range mongoDBs {
+
 		err := deployMongoDBCluster(c.Target, mongoDB)
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to deploy MongoDB cluster %s in target cluster", mongoDB.Name))
 
@@ -53,30 +62,58 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 
 		service, err := getServiceForStatefulSet(mongoDB, c.Origin)
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to get service for MongoDB cluster %s in origin cluster", mongoDB.Name))
+
 		resources.ExportService(c.Origin, service.Namespace, service.Name)
 		resources.ExportService(c.Target, service.Namespace, service.Name)
 
-		err = statefulset.CreateSyncUser(c.Target, mongoDB.Name+"-0", mongoDB.Namespace)
+		originPrimary, err := mongo.GetPrimaryMongoHost(mongoClientOrigin, service.Name+"."+service.Namespace+".svc.cluster.local")
+		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to get primary MongoDB host for cluster %s in origin cluster", mongoDB.Name))
+		originPrimaryHost := originPrimary + "." + service.Name + "." + service.Namespace + ".svc.cluster.local"
+		targetPrimary, err := mongo.GetPrimaryMongoHost(mongoClientTarget, service.Name+"."+service.Namespace+".svc.cluster.local")
+		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to get primary MongoDB host for cluster %s in target cluster", mongoDB.Name))
+		targetPrimaryHost := targetPrimary + "." + service.Name + "." + service.Namespace + ".svc.cluster.local"
+
+		logger.Info(fmt.Sprintf("Primary MongoDB host in origin cluster: %s", originPrimaryHost))
+		logger.Info(fmt.Sprintf("Primary MongoDB host in target cluster: %s", targetPrimaryHost))
+
+		err = mongo.CreateSyncUser(mongoClientOrigin, originPrimaryHost)
+		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to create sync user for MongoDB cluster %s in origin cluster", mongoDB.Name))
+		err = mongo.CreateSyncUser(mongoClientTarget, targetPrimaryHost)
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to create sync user for MongoDB cluster %s in target cluster", mongoDB.Name))
 
-		deployMongoSyncer(c.Target)
+		originURI := getMongoURI(c.Origin, mongoDB, service, resources, mongoClientOrigin, originPrimaryHost)
+		targetURI := getMongoURI(c.Target, mongoDB, service, resources, mongoClientTarget, targetPrimaryHost)
 
-		// TODO: Wait for Mongosyncer to be done
-		// check if job with name "mongosyncer" is done
-		jobName := "mongosyncer"
-		job, err := c.Target.Clientset.BatchV1().Jobs("default").Get(context.TODO(), jobName, metav1.GetOptions{})
-		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to get job %s in target cluster", jobName))
-		if job.Status.Succeeded == 0 {
+		deployMongoSyncer(c.Origin, originURI, targetURI)
 
-		}
+		waitForJobCompletion(c.Origin, "default", "mongosyncer-job")
+
+		err = mongoClientOrigin.DeleteClientPod()
+		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to delete MongoDB client pod in origin cluster for cluster %s", mongoDB.Name))
+		err = mongoClientTarget.DeleteClientPod()
+		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to delete MongoDB client pod in target cluster for cluster %s", mongoDB.Name))
 	}
 
 }
 
-func deployMongoSyncer(c kube.Cluster) {
+func getMongoURI(c kube.Cluster, mongoDB mongov1.MongoDBCommunity, service corev1.Service, resources migration.Resources, mongoClient *mongo.Client, host string) string {
+	hosts, err := mongo.GetMongoHostsAuthenticated(mongoClient, host)
+	exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to get MongoDB hosts for cluster %s", mongoDB.Name))
+
+	updatedHosts := statefulset.UpdateMongoHosts(hosts, resources, service, c)
+
+	uri := fmt.Sprintf(
+		"mongodb://clusteradmin:password1@%s/?authSource=admin",
+		strings.Join(updatedHosts, ","),
+	)
+	logger.Info(uri)
+	return uri
+}
+
+func deployMongoSyncer(c kube.Cluster, originURI, targetURI string) {
 	config := map[string]string{
-		//"MONGOSYNC_SOURCE": fmt.Sprintf("%s.%s.svc.cluster.local:27017", constants.MongoSyncerSourceService, constants.MongoSyncerSourceNamespace),
-		//"MONGOSYNC_TARGET": fmt.Sprintf("%s.%s.svc.cluster.local:27017", constants.MongoSyncerTargetService, constants.MongoSyncerTargetNamespace),
+		"MONGOSYNC_SOURCE": originURI,
+		"MONGOSYNC_TARGET": targetURI,
 	}
 
 	configMap := &corev1.ConfigMap{
@@ -88,7 +125,7 @@ func deployMongoSyncer(c kube.Cluster) {
 		Data: config,
 	}
 
-	_, err := c.Clientset.CoreV1().ConfigMaps("default").Create(context.TODO(), configMap, metav1.CreateOptions{})
+	err := statefulset.CreateResourceIfNotExists(c, kube.ConfigMap, configMap.Namespace, configMap)
 	exit.OnErrorWithMessage(err, "Failed to create MongoSyncer ConfigMap")
 
 	err = c.CreateResourcesFromURL(constants.MongoSyncerURL, "default")
@@ -118,7 +155,7 @@ func waitForMongoDbToBeReady(c kube.Cluster, name string, namespace string) {
 		resource, err := c.FetchCustomResource(
 			"mongodbcommunity.mongodb.com",
 			"v1",
-			"MongoDBCommunity",
+			"mongodbcommunity",
 			namespace,
 			name,
 		)
@@ -138,6 +175,8 @@ func waitForMongoDbToBeReady(c kube.Cluster, name string, namespace string) {
 			logger.Debug(fmt.Sprintf("MongoDB cluster %s in namespace %s is ready", name, namespace))
 			return
 		}
+
+		time.Sleep(5 * time.Second)
 
 		logger.Debug(fmt.Sprintf("MongoDB cluster %s in namespace %s is not ready yet, current phase: %s", name, namespace, mongoDB.Status.Phase))
 	}
@@ -221,7 +260,7 @@ func scanExistingDatabases(c kube.Cluster) ([]mongov1.MongoDBCommunity, error) {
 	resources, err := c.FetchCustomResources(
 		"mongodbcommunity.mongodb.com",
 		"v1",
-		"MongoDBCommunity",
+		"mongodbcommunity",
 	)
 	exit.OnErrorWithMessage(err, "Failed to fetch MongoDB Community resources")
 
@@ -246,20 +285,43 @@ func scanExistingDatabases(c kube.Cluster) ([]mongov1.MongoDBCommunity, error) {
 func deployMongoDBCluster(c kube.Cluster, mongoDB mongov1.MongoDBCommunity) error {
 	logger.Debug(fmt.Sprintf("Deploying MongoDB cluster %s in namespace %s", mongoDB.Name, mongoDB.Namespace))
 
-	jsonData, err := json.Marshal(mongoDB)
+	cleanedDataInterface := kube.CleanResourceForCreation(mongoDB)
+
+	jsonData, err := json.Marshal(cleanedDataInterface)
 	if err != nil {
 		return err
 	}
 
-	var data map[string]interface{}
-	if err := json.Unmarshal(jsonData, &data); err != nil {
+	var cleanedData map[string]interface{}
+	if err := json.Unmarshal(jsonData, &cleanedData); err != nil {
 		return err
 	}
 
-	err = c.CreateCustomResource(mongoDB.Namespace, data)
+	err = c.CreateCustomResource(mongoDB.Namespace, cleanedData)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func waitForJobCompletion(c kube.Cluster, namespace, jobName string) {
+	timeout := time.After(10 * time.Minute)
+	tick := time.Tick(5 * time.Second)
+
+	for {
+		select {
+		case <-timeout:
+			exit.OnErrorWithMessage(fmt.Errorf("timeout waiting for job %s in namespace %s to complete", jobName, namespace),
+				fmt.Sprintf("Job %s in namespace %s did not complete within 10 minutes", jobName, namespace))
+		case <-tick:
+			job, err := c.Clientset.BatchV1().Jobs(namespace).Get(context.TODO(), jobName, metav1.GetOptions{})
+			exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to get job %s in namespace %s", jobName, namespace))
+			if job.Status.Succeeded > 0 {
+				logger.Debug(fmt.Sprintf("Job %s in namespace %s has completed", jobName, namespace))
+				return
+			}
+			logger.Debug(fmt.Sprintf("Job %s in namespace %s not completed yet, waiting...", jobName, namespace))
+		}
+	}
 }
