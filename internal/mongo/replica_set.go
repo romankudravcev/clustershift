@@ -1,4 +1,4 @@
-package statefulset
+package mongo
 
 import (
 	"clustershift/internal/logger"
@@ -7,30 +7,32 @@ import (
 	"time"
 )
 
-// addMongoMember adds a new member to the MongoDB replica set using client pod
-func addMongoMember(client *MongoClient, mongoHost, newHost string) error {
+// AddMongoMember adds a new member to the MongoDB replica set using client pod
+func AddMongoMember(client *Client, mongoHost, newHost string) error {
 	script := fmt.Sprintf("rs.add('%s');", newHost)
-	return execMongoCommand(client, mongoHost, script)
+	_, err := execMongoCommand(client, mongoHost, script)
+	return err
 }
 
-// removeMongoMember removes a member from the MongoDB replica set using client pod
-func removeMongoMember(client *MongoClient, mongoHost, hostToRemove string) error {
+// RemoveMongoMember removes a member from the MongoDB replica set using client pod
+func RemoveMongoMember(client *Client, mongoHost, hostToRemove string) error {
 	script := fmt.Sprintf(`rs.remove("%s");`, hostToRemove)
-	return execMongoCommand(client, mongoHost, script)
+	_, err := execMongoCommand(client, mongoHost, script)
+	return err
 }
 
-// promoteMember promotes a MongoDB replica set member to primary using client pod
-func promoteMember(client *MongoClient, mongoHost, host string) error {
+// PromoteMember promotes a MongoDB replica set member to primary using client pod
+func PromoteMember(client *Client, mongoHost, host string) error {
 	return setPriorityForMember(client, mongoHost, host, highPriority)
 }
 
-// demoteMember demotes a MongoDB replica set member from primary using client pod
-func demoteMember(client *MongoClient, mongoHost, host string) error {
+// DemoteMember demotes a MongoDB replica set member from primary using client pod
+func DemoteMember(client *Client, mongoHost, host string) error {
 	return setPriorityForMember(client, mongoHost, host, lowPriority)
 }
 
 // setPriorityForMember sets the priority for a MongoDB replica set member using client pod
-func setPriorityForMember(client *MongoClient, mongoHost, host string, priority int) error {
+func setPriorityForMember(client *Client, mongoHost, host string, priority int) error {
 	script := fmt.Sprintf(`
 cfg = rs.conf();
 for (var i = 0; i < cfg.members.length; i++) {
@@ -41,11 +43,12 @@ for (var i = 0; i < cfg.members.length; i++) {
 rs.reconfig(cfg, {force: true});
 `, host, priority)
 
-	return execMongoCommand(client, mongoHost, script)
+	_, err := execMongoCommand(client, mongoHost, script)
+	return err
 }
 
-// waitForMongoMemberSecondary waits for a MongoDB member to become SECONDARY using client pod
-func waitForMongoMemberSecondary(client *MongoClient, mongoHost, targetHost string) error {
+// WaitForMongoMemberSecondary waits for a MongoDB member to become SECONDARY using client pod
+func WaitForMongoMemberSecondary(client *Client, mongoHost, targetHost string) error {
 	timeout := defaultTimeout
 	interval := defaultCheckInterval
 	deadline := time.Now().Add(timeout)
@@ -63,19 +66,20 @@ func waitForMongoMemberSecondary(client *MongoClient, mongoHost, targetHost stri
 	return fmt.Errorf("member %s did not become SECONDARY within %v", targetHost, timeout)
 }
 
-// overwriteMongoHosts updates the MongoDB replica set configuration with new hosts using client pod
-func overwriteMongoHosts(client *MongoClient, mongoHost string, newHosts []string) error {
+// OverwriteMongoHosts updates the MongoDB replica set configuration with new hosts using client pod
+func OverwriteMongoHosts(client *Client, mongoHost string, newHosts []string) error {
 	script := "cfg = rs.conf();"
 	for i, host := range newHosts {
 		script += fmt.Sprintf(`cfg.members[%d].host = "%s";`, i, host)
 	}
 	script += "rs.reconfig(cfg);"
 
-	return execMongoCommand(client, mongoHost, script)
+	_, err := execMongoCommand(client, mongoHost, script)
+	return err
 }
 
-// waitForTargetPrimaryElection waits for a primary to be elected from target cluster using client pod
-func waitForTargetPrimaryElection(client *MongoClient, ctx *MigrationContext) error {
+// WaitForTargetPrimaryElection waits for a primary to be elected from target cluster using client pod
+func WaitForTargetPrimaryElection(client *Client, ctx *MigrationContext) error {
 	// Use the first available host for checking primary status
 	var checkHost string
 	if len(ctx.TargetHosts) > 0 {

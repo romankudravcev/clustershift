@@ -1,4 +1,4 @@
-package statefulset
+package mongo
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
@@ -7,19 +7,10 @@ import (
 )
 
 const (
-	mongoPort            = "27017"
-	mongoImage           = "mongo"
-	mongoshCommand       = "mongosh"
-	primaryState         = "PRIMARY"
-	secondaryState       = "SECONDARY"
 	defaultTimeout       = 10 * time.Minute
 	defaultCheckInterval = 5 * time.Second
-	stepDownDuration     = 60
 	highPriority         = 1
 	lowPriority          = 0
-	// MongoDB client pod constants
-	mongoClientPodName = "mongosh-client"
-	mongoClientImage   = "mongo:latest"
 )
 
 // MongoMember represents a MongoDB replica set member

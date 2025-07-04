@@ -4,6 +4,7 @@ import (
 	"clustershift/internal/exit"
 	"clustershift/internal/kube"
 	"clustershift/internal/migration"
+	"clustershift/internal/mongo"
 	"context"
 	"fmt"
 	appsv1 "k8s.io/api/apps/v1"
@@ -12,6 +13,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"reflect"
 	"strings"
+)
+
+const (
+	mongoPort  = "27017"
+	mongoImage = "mongo"
 )
 
 // scanExistingDatabases finds all MongoDB StatefulSets in the cluster
@@ -54,7 +60,7 @@ func getServiceForStatefulSet(sts appsv1.StatefulSet, c kube.Cluster) (v1.Servic
 }
 
 // setupTargetResources creates the service and StatefulSet in the target cluster
-func setupTargetResources(ctx *MigrationContext, c kube.Clusters) error {
+func setupTargetResources(ctx *mongo.MigrationContext, c kube.Clusters) error {
 	service := ctx.Service
 	serviceInterface := interface{}(service)
 	serviceInterface = kube.CleanResourceForCreation(serviceInterface)
