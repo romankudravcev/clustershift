@@ -28,9 +28,6 @@ func execMongoScript(client *Client, mongoHost, script string) (string, error) {
 	escapedScript = regexp.MustCompile(`\s+`).ReplaceAllString(escapedScript, " ")
 	escapedScript = strings.TrimSpace(escapedScript)
 
-	// Escape double quotes for bash
-	escapedScript = strings.ReplaceAll(escapedScript, `"`, `\"`)
-
 	return execMongoCommand(client, mongoHost, escapedScript)
 }
 
