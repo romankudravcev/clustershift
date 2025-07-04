@@ -51,7 +51,7 @@ func CreateSiteController(c kube.Cluster) {
 		}
 	}
 
-	err = kube.WaitForPodsReady(c, "application=skupper-site-controller", "skupper-site-controller", 90*time.Second)
+	err = kube.WaitForPodsReadyByLabel(c, "application=skupper-site-controller", "skupper-site-controller", 90*time.Second)
 	exit.OnErrorWithMessage(err, "Failed to wait for Site Controller pods to be ready")
 }
 
@@ -63,10 +63,10 @@ func CreateSite(c kube.Cluster, name, namespace string) {
 	}
 	c.CreateConfigmap("skupper-site", namespace, data)
 
-	err := kube.WaitForPodsReady(c, "application=skupper-router", namespace, 90*time.Second)
+	err := kube.WaitForPodsReadyByLabel(c, "application=skupper-router", namespace, 90*time.Second)
 	exit.OnErrorWithMessage(err, "Failed to wait for Skupper pods to be ready")
 
-	err = kube.WaitForPodsReady(c, "app.kubernetes.io/name=skupper-service-controller", namespace, 90*time.Second)
+	err = kube.WaitForPodsReadyByLabel(c, "app.kubernetes.io/name=skupper-service-controller", namespace, 90*time.Second)
 	exit.OnErrorWithMessage(err, "Failed to wait for Skupper pods to be ready")
 }
 

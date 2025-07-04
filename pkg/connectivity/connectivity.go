@@ -82,7 +82,7 @@ func RunClusterConnectivityProbe(clusters kube.Clusters) {
 
 			// Check if the pods are running
 			logger.Debug("Waiting for pods to be ready")
-			err = kube.WaitForPodsReady(
+			err = kube.WaitForPodsReadyByLabel(
 				clusters.Origin,
 				constants.ConnectivityProbeLabelSelector,
 				constants.ConnectivityProbeNamespace,
@@ -93,7 +93,7 @@ func RunClusterConnectivityProbe(clusters kube.Clusters) {
 				cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
 				continue
 			}
-			err = kube.WaitForPodsReady(
+			err = kube.WaitForPodsReadyByLabel(
 				clusters.Target,
 				constants.ConnectivityProbeLabelSelector,
 				constants.ConnectivityProbeNamespace,
