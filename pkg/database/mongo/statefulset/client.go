@@ -70,7 +70,7 @@ func (mc *MongoClient) CreateClientPod() error {
 	}
 
 	// Use your existing CreateResource method
-	err := mc.cluster.CreateResource(kube.Pod, mc.podName, mc.namespace, pod)
+	err := mc.cluster.CreateResource(kube.Pod, mc.namespace, pod)
 	if err != nil {
 		return fmt.Errorf("failed to create MongoDB client pod: %w", err)
 	}

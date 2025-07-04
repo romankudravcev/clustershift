@@ -1,6 +1,7 @@
 package kube
 
 import (
+	"clustershift/internal/exit"
 	"fmt"
 	"reflect"
 
@@ -29,7 +30,8 @@ func (c *Clusters) CreateResourceDiff(resourceType ResourceType) {
 		namespace := resourceValue.FieldByName("ObjectMeta").FieldByName("Namespace").String()
 
 		if namespace != "clustershift" {
-			c.Target.CreateResource(resourceType, namespace, newResource)
+			err := c.Target.CreateResource(resourceType, namespace, newResource)
+			exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to create %s in target cluster", resourceType))
 		}
 	}
 }
