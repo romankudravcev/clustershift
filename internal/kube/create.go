@@ -62,6 +62,9 @@ func (c Cluster) CreateResource(resourceType ResourceType, name, namespace strin
 	case StatefulSet:
 		_, err := c.Clientset.AppsV1().StatefulSets(namespace).Create(context.TODO(), resource.(*appsv1.StatefulSet), metav1.CreateOptions{})
 		return err
+	case Pod:
+		_, err := c.Clientset.CoreV1().Pods(namespace).Create(context.TODO(), resource.(*corev1.Pod), metav1.CreateOptions{})
+		return err
 	case Middleware:
 		_, err := c.TraefikClientset.TraefikV1alpha1().Middlewares(namespace).Create(context.TODO(), resource.(*traefikv1alpha1.Middleware), metav1.CreateOptions{})
 		return err
