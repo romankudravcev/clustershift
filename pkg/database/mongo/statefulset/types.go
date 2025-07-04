@@ -17,6 +17,9 @@ const (
 	stepDownDuration     = 60
 	highPriority         = 1
 	lowPriority          = 0
+	// MongoDB client pod constants
+	mongoClientPodName = "mongosh-client"
+	mongoClientImage   = "mongo:latest"
 )
 
 // MongoMember represents a MongoDB replica set member
