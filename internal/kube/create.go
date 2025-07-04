@@ -30,7 +30,7 @@ import (
 )
 
 // CreateResource creates a single resource by resource type, name, namespace and resource.
-func (c Cluster) CreateResource(resourceType ResourceType, name, namespace string, resource interface{}) error {
+func (c Cluster) CreateResource(resourceType ResourceType, namespace string, resource interface{}) error {
 	switch resourceType {
 	case Deployment:
 		_, err := c.Clientset.AppsV1().Deployments(namespace).Create(context.TODO(), resource.(*appsv1.Deployment), metav1.CreateOptions{})
@@ -92,7 +92,7 @@ func (c Cluster) CreateNewNamespace(name string) {
 		},
 	}
 
-	err := c.CreateResource(Namespace, "", "", namespace)
+	err := c.CreateResource(Namespace, "", namespace)
 	if err != nil && err.Error() == "namespaces \""+name+"\" already exists" {
 		// Log that namespace already exists
 		//fmt.Printf("Namespace %s already exists\n", name)
@@ -108,7 +108,7 @@ func (c Cluster) CreateConfigmap(name string, namespace string, data map[string]
 		Data: data,
 	}
 
-	err := c.CreateResource(ConfigMap, name, namespace, configMap)
+	err := c.CreateResource(ConfigMap, namespace, configMap)
 	if err != nil {
 		//TODO error handling
 	}

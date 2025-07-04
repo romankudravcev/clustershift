@@ -56,13 +56,11 @@ func RunClusterConnectivityProbe(clusters kube.Clusters) {
 				"6443")
 
 			err := clusters.Origin.CreateResource(kube.ConfigMap,
-				constants.ConnectivityProbeConfigmapName,
 				constants.ConnectivityProbeNamespace,
 				originConfigMap)
 			exit.OnErrorWithMessage(err, "Error creating config map")
 
 			err = clusters.Target.CreateResource(kube.ConfigMap,
-				constants.ConnectivityProbeConfigmapName,
 				constants.ConnectivityProbeNamespace,
 				targetConfigMap)
 			exit.OnErrorWithMessage(err, "Error creating config map")

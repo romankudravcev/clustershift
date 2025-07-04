@@ -85,7 +85,7 @@ func CreateConnectionToken(c kube.Cluster, name, namespace string) {
 		},
 	}
 
-	err := c.CreateResource(kube.Secret, name, namespace, secret)
+	err := c.CreateResource(kube.Secret, namespace, secret)
 	if err != nil {
 		if k8serrors.IsAlreadyExists(err) || strings.Contains(err.Error(), "already exists") {
 			logger.Info("Secret already existing...")
@@ -122,7 +122,7 @@ func ExtractConnectionToken(from kube.Cluster, to kube.Cluster, name, namespace 
 	exit.OnErrorWithMessage(err, "Failed to fetch secret")
 	cleanedSecretInterface := kube.CleanResourceForCreation(secretInterface)
 	secret := cleanedSecretInterface.(*v1.Secret)
-	err = to.CreateResource(kube.Secret, name, namespace, secret)
+	err = to.CreateResource(kube.Secret, namespace, secret)
 	if err != nil {
 		if k8serrors.IsAlreadyExists(err) || strings.Contains(err.Error(), "already exists") {
 			logger.Info("Secret already existing...")
