@@ -208,19 +208,24 @@ func (c Cluster) FetchKubernetesAPIEndpoint() (string, error) {
 	return "", fmt.Errorf("no suitable IP and port found for the Kubernetes API endpoint")
 }
 
-func (c Cluster) ExecIntoPod(namespace, podName string, command []string, stdout, stderr io.Writer) error {
+func (c Cluster) ExecIntoPod(namespace, podName, container string, command []string, stdout, stderr io.Writer) error {
+	opts := &v1.PodExecOptions{
+		Command: command,
+		Stdin:   false,
+		Stdout:  true,
+		Stderr:  true,
+		TTY:     false,
+	}
+	if container != "" {
+		opts.Container = container
+	}
+
 	req := c.Clientset.CoreV1().RESTClient().Post().
 		Resource("pods").
 		Name(podName).
 		Namespace(namespace).
 		SubResource("exec").
-		VersionedParams(&v1.PodExecOptions{
-			Command: command,
-			Stdin:   false,
-			Stdout:  true,
-			Stderr:  true,
-			TTY:     false,
-		}, scheme.ParameterCodec)
+		VersionedParams(opts, scheme.ParameterCodec)
 
 	exec, err := remotecommand.NewSPDYExecutor(c.RestConfig, "POST", req.URL())
 	if err != nil {
