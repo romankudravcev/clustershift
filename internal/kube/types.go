@@ -18,6 +18,7 @@ const (
 	ClusterRole     K8sResourceType     = "ClusterRole"
 	ClusterRoleBind K8sResourceType     = "ClusterRoleBinding"
 	StatefulSet     K8sResourceType     = "StatefulSet"
+	Pod             K8sResourceType     = "Pod"
 	Middleware      TraefikResourceType = "Middleware"
 	IngressRoute    TraefikResourceType = "IngressRoute"
 	IngressRouteTCP TraefikResourceType = "IngressRouteTCP"

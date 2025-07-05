@@ -28,7 +28,7 @@ func Migrate(clusters kube.Clusters, resources migration.Resources) {
 
 	logger.Info("Migrate cnpg databases")
 	installOperator(clusters.Target)
-	err := kube.WaitForPodsReady(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
+	err := kube.WaitForPodsReadyByLabel(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
 	exit.OnErrorWithMessage(err, "Failed to wait for CNPG pods to be ready")
 
 	addClustersetDNS(clusters.Origin, resources)

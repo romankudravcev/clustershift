@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"clustershift/internal/constants"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -194,6 +195,8 @@ func EnsureLogger(level ...LogLevel) error {
 		logLevel := DefaultLogLevel
 		if len(level) > 0 {
 			logLevel = level[0]
+		} else if constants.Debug {
+			logLevel = DEBUG
 		}
 
 		// Initialize the default logger

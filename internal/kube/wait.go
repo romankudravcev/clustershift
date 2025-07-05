@@ -15,7 +15,7 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-func WaitForPodsReady(c Cluster, labelSelector string, namespace string, timeout time.Duration) error {
+func WaitForPodsReadyByLabel(c Cluster, labelSelector string, namespace string, timeout time.Duration) error {
 	listOptions := metav1.ListOptions{
 		LabelSelector: labelSelector,
 	}
@@ -51,6 +51,46 @@ func WaitForPodsReady(c Cluster, labelSelector string, namespace string, timeout
 
 		case <-timeoutCh:
 			return fmt.Errorf("timeout waiting for pods to be ready after %v", timeout)
+		}
+	}
+}
+
+func WaitForPodReadyByName(c Cluster, podName string, namespace string, timeout time.Duration) error {
+	listOptions := metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("metadata.name=%s", podName),
+	}
+
+	watcher, err := c.Clientset.CoreV1().Pods(namespace).Watch(context.TODO(), listOptions)
+	if err != nil {
+		return fmt.Errorf("error creating watch: %v", err)
+	}
+	defer watcher.Stop()
+
+	timeoutCh := time.After(timeout)
+
+	for {
+		select {
+		case event, ok := <-watcher.ResultChan():
+			if !ok {
+				return fmt.Errorf("watch channel closed")
+			}
+
+			switch event.Type {
+			case watch.Added, watch.Modified:
+				pod, ok := event.Object.(*corev1.Pod)
+				if !ok {
+					continue
+				}
+
+				if pod.Name == podName && pod.Namespace == namespace && isPodReady(pod) {
+					return nil
+				}
+			case watch.Error:
+				return fmt.Errorf("error watching pod: %v", event.Object)
+			}
+
+		case <-timeoutCh:
+			return fmt.Errorf("timeout waiting for pod to be ready after %v", timeout)
 		}
 	}
 }

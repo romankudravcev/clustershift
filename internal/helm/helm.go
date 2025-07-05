@@ -51,7 +51,7 @@ func HelmAddandInstallChart(h helmclient.Client, c ChartOptions) {
 	chartSpec := helmclient.ChartSpec{
 		ReleaseName:     c.ReleaseName,
 		ChartName:       c.ChartName,
-		Namespace:       c.ReleaseName,
+		Namespace:       c.Namespace,
 		Wait:            c.Wait,
 		UpgradeCRDs:     true,
 		CreateNamespace: true,

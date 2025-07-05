@@ -27,6 +27,10 @@ func (c Cluster) DeleteResource(resourceType ResourceType, name, namespace strin
 		return c.Clientset.RbacV1().ClusterRoles().Delete(context.TODO(), name, metav1.DeleteOptions{})
 	case ClusterRoleBind:
 		return c.Clientset.RbacV1().ClusterRoleBindings().Delete(context.TODO(), name, metav1.DeleteOptions{})
+	case StatefulSet:
+		return c.Clientset.AppsV1().StatefulSets(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	case Pod:
+		return c.Clientset.CoreV1().Pods(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
 	case Middleware:
 		return c.TraefikClientset.TraefikV1alpha1().Middlewares(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
 	case IngressRoute:

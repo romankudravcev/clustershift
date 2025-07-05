@@ -29,6 +29,10 @@ func (c Cluster) FetchResources(resourceType ResourceType) (interface{}, error) 
 		return c.Clientset.RbacV1().ClusterRoles().List(context.TODO(), metav1.ListOptions{})
 	case ClusterRoleBind:
 		return c.Clientset.RbacV1().ClusterRoleBindings().List(context.TODO(), metav1.ListOptions{})
+	case StatefulSet:
+		return c.Clientset.AppsV1().StatefulSets("").List(context.TODO(), metav1.ListOptions{})
+	case Pod:
+		return c.Clientset.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{})
 	case Middleware:
 		return c.TraefikClientset.TraefikV1alpha1().Middlewares("").List(context.TODO(), metav1.ListOptions{})
 	case IngressRoute:
@@ -65,6 +69,10 @@ func (c Cluster) FetchResource(resourceType ResourceType, name string, namespace
 		return c.Clientset.RbacV1().ClusterRoles().Get(context.TODO(), name, metav1.GetOptions{})
 	case ClusterRoleBind:
 		return c.Clientset.RbacV1().ClusterRoleBindings().Get(context.TODO(), name, metav1.GetOptions{})
+	case StatefulSet:
+		return c.Clientset.AppsV1().StatefulSets(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	case Pod:
+		return c.Clientset.CoreV1().Pods(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	case Middleware:
 		return c.TraefikClientset.TraefikV1alpha1().Middlewares(namespace).Get(context.TODO(), name, metav1.GetOptions{})
 	case IngressRoute:

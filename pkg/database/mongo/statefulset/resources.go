@@ -1,9 +1,10 @@
-package mongo
+package statefulset
 
 import (
 	"clustershift/internal/exit"
 	"clustershift/internal/kube"
 	"clustershift/internal/migration"
+	"clustershift/internal/mongo"
 	"context"
 	"fmt"
 	appsv1 "k8s.io/api/apps/v1"
@@ -14,6 +15,11 @@ import (
 	"strings"
 )
 
+const (
+	mongoPort  = "27017"
+	mongoImage = "mongo"
+)
+
 // scanExistingDatabases finds all MongoDB StatefulSets in the cluster
 func scanExistingDatabases(c kube.Cluster) []appsv1.StatefulSet {
 	statefulSets, err := c.Clientset.AppsV1().StatefulSets("").List(context.TODO(), metav1.ListOptions{})
@@ -21,6 +27,9 @@ func scanExistingDatabases(c kube.Cluster) []appsv1.StatefulSet {
 
 	var matches []appsv1.StatefulSet
 	for _, sts := range statefulSets.Items {
+		if sts.OwnerReferences[0].Kind == "MongoDBCommunity" {
+			continue
+		}
 		for _, container := range sts.Spec.Template.Spec.Containers {
 			if strings.Contains(container.Image, mongoImage) {
 				matches = append(matches, sts)
@@ -51,7 +60,7 @@ func getServiceForStatefulSet(sts appsv1.StatefulSet, c kube.Cluster) (v1.Servic
 }
 
 // setupTargetResources creates the service and StatefulSet in the target cluster
-func setupTargetResources(ctx *MigrationContext, c kube.Clusters) error {
+func setupTargetResources(ctx *mongo.MigrationContext, c kube.Clusters) error {
 	service := ctx.Service
 	serviceInterface := interface{}(service)
 	serviceInterface = kube.CleanResourceForCreation(serviceInterface)
@@ -62,20 +71,20 @@ func setupTargetResources(ctx *MigrationContext, c kube.Clusters) error {
 	statefulSetInterface = kube.CleanResourceForCreation(statefulSetInterface)
 	statefulSet = *statefulSetInterface.(*appsv1.StatefulSet)
 
-	if err := createResourceIfNotExists(c.Target, kube.Service, service.Name, service.Namespace, &service); err != nil {
+	if err := CreateResourceIfNotExists(c.Target, kube.Service, service.Namespace, &service); err != nil {
 		return fmt.Errorf("failed to create service %s in target cluster: %w", service.Name, err)
 	}
 
-	if err := createResourceIfNotExists(c.Target, kube.StatefulSet, statefulSet.Name, statefulSet.Namespace, &statefulSet); err != nil {
+	if err := CreateResourceIfNotExists(c.Target, kube.StatefulSet, statefulSet.Namespace, &statefulSet); err != nil {
 		return fmt.Errorf("failed to create StatefulSet %s in target cluster: %w", statefulSet.Name, err)
 	}
 
 	return nil
 }
 
-// createResourceIfNotExists creates a resource if it doesn't already exist
-func createResourceIfNotExists(cluster kube.Cluster, resourceType kube.ResourceType, name, namespace string, resource interface{}) error {
-	err := cluster.CreateResource(resourceType, name, namespace, resource)
+// CreateResourceIfNotExists creates a resource if it doesn't already exist
+func CreateResourceIfNotExists(cluster kube.Cluster, resourceType kube.ResourceType, namespace string, resource interface{}) error {
+	err := cluster.CreateResource(resourceType, namespace, resource)
 	if err != nil {
 		if k8serrors.IsAlreadyExists(err) || strings.Contains(err.Error(), "already exists") {
 			return nil // Resource already exists, this is fine
@@ -85,8 +94,8 @@ func createResourceIfNotExists(cluster kube.Cluster, resourceType kube.ResourceT
 	return nil
 }
 
-// updateMongoHosts updates MongoDB host strings based on networking configuration
-func updateMongoHosts(hosts []string, resources migration.Resources, service v1.Service, c kube.Cluster) []string {
+// UpdateMongoHosts updates MongoDB host strings based on networking configuration
+func UpdateMongoHosts(hosts []string, resources migration.Resources, service v1.Service, c kube.Cluster) []string {
 	updatedHosts := make([]string, 0)
 
 	if isHeadlessService(service) {
