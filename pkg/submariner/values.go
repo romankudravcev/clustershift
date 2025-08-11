@@ -3,6 +3,7 @@ package submariner
 import (
 	"bufio"
 	"clustershift/internal/constants"
+	"clustershift/internal/exit"
 	"clustershift/internal/kube"
 	"clustershift/internal/logger"
 	"crypto/rand"
@@ -55,17 +56,28 @@ serviceAccounts:
 }
 
 func BuildCIDRs(c kube.Clusters) *CIDRs {
-	podCIDROrigin := promptForInput("Enter Pod CIDR for origin cluster (blank for automatic detection): ")
-	podCIDRTarget := promptForInput("Enter Pod CIDR for target cluster (blank for automatic detection): ")
+	podCIDROrigin := promptForInput("Enter Pod CIDR for origin cluster: ")
+	podCIDRTarget := promptForInput("Enter Pod CIDR for target cluster: ")
 	serviceCIDROrigin := promptForInput("Enter Service CIDR for origin cluster (blank for automatic detection): ")
 	serviceCIDRTarget := promptForInput("Enter Service CIDR for target cluster (blank for automatic detection): ")
 	brokerURL := promptForInput("Enter broker URL (blank for automatic detection): ")
 
 	serviceCIDROrigin = fetchOrPrompt(serviceCIDROrigin, func() (string, error) { return c.Origin.FetchServiceCIDRs() }, "origin", "Service CIDR")
 	serviceCIDRTarget = fetchOrPrompt(serviceCIDRTarget, func() (string, error) { return c.Target.FetchServiceCIDRs() }, "target", "Service CIDR")
-	podCIDROrigin = fetchOrPrompt(podCIDROrigin, func() (string, error) { return c.Origin.FetchPodCIDRs() }, "origin", "Pod CIDR")
-	podCIDRTarget = fetchOrPrompt(podCIDRTarget, func() (string, error) { return c.Target.FetchPodCIDRs() }, "target", "Pod CIDR")
 	brokerURL = fetchOrPrompt(brokerURL, func() (string, error) { return c.Origin.FetchKubernetesAPIEndpoint() }, "", "Kubernetes API endpoint")
+
+	if podCIDROrigin == "" || podCIDRTarget == "" {
+		logger.Debug("Pod CIDRs are required for both clusters. Please provide them.")
+		podCIDROrigin = promptForInput("Enter Pod CIDR for origin cluster: ")
+		podCIDRTarget = promptForInput("Enter Pod CIDR for target cluster: ")
+	}
+
+	if podCIDROrigin == "" {
+		exit.OnErrorWithMessage(fmt.Errorf("pod CIDR cannot be empty"), "Pod CIDR for origin cluster cannot be empty")
+	}
+	if podCIDRTarget == "" {
+		exit.OnErrorWithMessage(fmt.Errorf("pod CIDR cannot be empty"), "Pod CIDR for target cluster cannot be empty")
+	}
 
 	logger.Debug(fmt.Sprintf("Pod CIDR Origin: %s\n", podCIDROrigin))
 	logger.Debug(fmt.Sprintf("Pod CIDR Target: %s\n", podCIDRTarget))
