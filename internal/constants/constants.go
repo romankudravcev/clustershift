@@ -31,7 +31,7 @@ const (
 	SubmarinerBrokerNamespace   = "submariner-k8s-broker"
 	SubmarinerOperatorNamespace = "submariner-operator"
 	SubmarinerBrokerClientToken = "submariner-k8s-broker-client-token"
-	SubmarinerVersion           = "0.19"
+	SubmarinerVersion           = "0.20.1"
 
 	// Linkerd constants
 	LinkerdEdgeRepoName              = "linkerd-edge"
