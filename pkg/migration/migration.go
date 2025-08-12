@@ -28,7 +28,7 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string, opts prompt.Migra
 
 	cnpg.DemoteOriginCluster(clusters.Origin)
 	cnpg.DisableReplication(clusters.Target)
-	redirect.EnableRequestForwarding(clusters)
+	redirect.EnableRequestForwarding(clusters, opts, resources)
 }
 
 func prepareMigration(kubeconfigOrigin string, kubeconfigTarget string, opts prompt.MigrationOptions) {
@@ -42,7 +42,9 @@ func prepareMigration(kubeconfigOrigin string, kubeconfigTarget string, opts pro
 	clusters.Target.CreateNewNamespace("clustershift")
 
 	connectivity.RunClusterConnectivityProbe(clusters)
-	redirect.InitializeRequestForwarding(clusters)
+	if opts.Rerouting == prompt.ReroutingClustershift {
+		redirect.InitializeRequestForwarding(clusters)
+	}
 }
 
 func migrateDatabases(resources migration2.Resources) {
