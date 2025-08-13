@@ -396,8 +396,10 @@ func scanExistingDatabases(c kube.Cluster) bool {
 		"v1",
 		"clusters",
 	)
+	if err.Error() == "the server could not find the requested resource" {
+		return false
+	}
 	exit.OnErrorWithMessage(err, "Error fetching custom resources")
-
 	if len(resources) == 0 {
 		return false
 	}
