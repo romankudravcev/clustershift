@@ -51,7 +51,7 @@ func CreateSiteController(c kube.Cluster) {
 		}
 	}
 
-	err = kube.WaitForPodsReady(c, "application=skupper-site-controller", "skupper-site-controller", 90*time.Second)
+	err = kube.WaitForPodsReadyByLabel(c, "application=skupper-site-controller", "skupper-site-controller", 90*time.Second)
 	exit.OnErrorWithMessage(err, "Failed to wait for Site Controller pods to be ready")
 }
 
@@ -63,10 +63,10 @@ func CreateSite(c kube.Cluster, name, namespace string) {
 	}
 	c.CreateConfigmap("skupper-site", namespace, data)
 
-	err := kube.WaitForPodsReady(c, "application=skupper-router", namespace, 90*time.Second)
+	err := kube.WaitForPodsReadyByLabel(c, "application=skupper-router", namespace, 90*time.Second)
 	exit.OnErrorWithMessage(err, "Failed to wait for Skupper pods to be ready")
 
-	err = kube.WaitForPodsReady(c, "app.kubernetes.io/name=skupper-service-controller", namespace, 90*time.Second)
+	err = kube.WaitForPodsReadyByLabel(c, "app.kubernetes.io/name=skupper-service-controller", namespace, 90*time.Second)
 	exit.OnErrorWithMessage(err, "Failed to wait for Skupper pods to be ready")
 }
 
@@ -85,7 +85,7 @@ func CreateConnectionToken(c kube.Cluster, name, namespace string) {
 		},
 	}
 
-	err := c.CreateResource(kube.Secret, name, namespace, secret)
+	err := c.CreateResource(kube.Secret, namespace, secret)
 	if err != nil {
 		if k8serrors.IsAlreadyExists(err) || strings.Contains(err.Error(), "already exists") {
 			logger.Info("Secret already existing...")
@@ -122,7 +122,7 @@ func ExtractConnectionToken(from kube.Cluster, to kube.Cluster, name, namespace 
 	exit.OnErrorWithMessage(err, "Failed to fetch secret")
 	cleanedSecretInterface := kube.CleanResourceForCreation(secretInterface)
 	secret := cleanedSecretInterface.(*v1.Secret)
-	err = to.CreateResource(kube.Secret, name, namespace, secret)
+	err = to.CreateResource(kube.Secret, namespace, secret)
 	if err != nil {
 		if k8serrors.IsAlreadyExists(err) || strings.Contains(err.Error(), "already exists") {
 			logger.Info("Secret already existing...")

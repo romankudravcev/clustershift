@@ -7,14 +7,8 @@ import (
 )
 
 const (
-	mongoPort            = "27017"
-	mongoImage           = "mongo"
-	mongoshCommand       = "mongosh"
-	primaryState         = "PRIMARY"
-	secondaryState       = "SECONDARY"
 	defaultTimeout       = 10 * time.Minute
 	defaultCheckInterval = 5 * time.Second
-	stepDownDuration     = 60
 	highPriority         = 1
 	lowPriority          = 0
 )

@@ -10,7 +10,8 @@ import (
 	"clustershift/internal/prompt"
 	"clustershift/pkg/connectivity"
 	"clustershift/pkg/database/cnpg"
-	"clustershift/pkg/database/mongo"
+	mongooperator "clustershift/pkg/database/mongo/operator"
+	mongostateful "clustershift/pkg/database/mongo/statefulset"
 	"clustershift/pkg/redirect"
 )
 
@@ -47,7 +48,8 @@ func prepareMigration(kubeconfigOrigin string, kubeconfigTarget string, opts pro
 
 func migrateDatabases(resources migration2.Resources) {
 	cnpg.Migrate(clusters, resources)
-	mongo.Migrate(clusters, resources)
+	mongostateful.Migrate(clusters, resources)
+	mongooperator.Migrate(clusters, resources)
 }
 
 func migrateKubernetesResources() {

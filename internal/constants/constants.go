@@ -51,4 +51,10 @@ const (
 	// CNPG constants
 	CNPGNamespace     = "cnpg-system"
 	CNPGLabelSelector = "app.kubernetes.io/name=cloudnative-pg"
+
+	// MongoDB Community Operator constants
+	MongoDBOperatorRepoName  = "mongodb"
+	MongoDBOperatorRepoURL   = "https://mongodb.github.io/helm-charts"
+	MongoDBOperatorChartName = "community-operator"
+	MongoSyncerURL           = "https://raw.githubusercontent.com/romankudravcev/mongosyncer/refs/heads/main/k8s-job.yaml"
 )

@@ -56,13 +56,11 @@ func RunClusterConnectivityProbe(clusters kube.Clusters) {
 				"6443")
 
 			err := clusters.Origin.CreateResource(kube.ConfigMap,
-				constants.ConnectivityProbeConfigmapName,
 				constants.ConnectivityProbeNamespace,
 				originConfigMap)
 			exit.OnErrorWithMessage(err, "Error creating config map")
 
 			err = clusters.Target.CreateResource(kube.ConfigMap,
-				constants.ConnectivityProbeConfigmapName,
 				constants.ConnectivityProbeNamespace,
 				targetConfigMap)
 			exit.OnErrorWithMessage(err, "Error creating config map")
@@ -84,7 +82,7 @@ func RunClusterConnectivityProbe(clusters kube.Clusters) {
 
 			// Check if the pods are running
 			logger.Debug("Waiting for pods to be ready")
-			err = kube.WaitForPodsReady(
+			err = kube.WaitForPodsReadyByLabel(
 				clusters.Origin,
 				constants.ConnectivityProbeLabelSelector,
 				constants.ConnectivityProbeNamespace,
@@ -95,7 +93,7 @@ func RunClusterConnectivityProbe(clusters kube.Clusters) {
 				cleanupResources(&clusters, constants.ConnectivityProbeNamespace)
 				continue
 			}
-			err = kube.WaitForPodsReady(
+			err = kube.WaitForPodsReadyByLabel(
 				clusters.Target,
 				constants.ConnectivityProbeLabelSelector,
 				constants.ConnectivityProbeNamespace,
