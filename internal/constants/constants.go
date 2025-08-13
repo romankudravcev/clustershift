@@ -31,7 +31,7 @@ const (
 	SubmarinerBrokerNamespace   = "submariner-k8s-broker"
 	SubmarinerOperatorNamespace = "submariner-operator"
 	SubmarinerBrokerClientToken = "submariner-k8s-broker-client-token"
-	SubmarinerVersion           = "0.19"
+	SubmarinerVersion           = "0.20.1"
 
 	// Linkerd constants
 	LinkerdEdgeRepoName              = "linkerd-edge"
@@ -49,7 +49,6 @@ const (
 	SkupperSiteControllerURL = "https://raw.githubusercontent.com/skupperproject/skupper/refs/heads/1.8/cmd/site-controller/deploy-watch-all-ns.yaml"
 
 	// CNPG constants
-	CNPGOperatorURL   = "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.24/releases/cnpg-1.24.1.yaml"
 	CNPGNamespace     = "cnpg-system"
 	CNPGLabelSelector = "app.kubernetes.io/name=cloudnative-pg"
 

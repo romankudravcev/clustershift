@@ -10,6 +10,8 @@ import (
 	"clustershift/pkg/skupper"
 	"encoding/json"
 	"fmt"
+	appv1 "k8s.io/api/apps/v1"
+	"strings"
 	"time"
 
 	apiv1 "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -27,17 +29,42 @@ func Migrate(clusters kube.Clusters, resources migration.Resources) {
 	}
 
 	logger.Info("Migrate cnpg databases")
-	installOperator(clusters.Target)
-	err := kube.WaitForPodsReadyByLabel(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
+
+	deploymentInterface, err := clusters.Origin.FetchResource(kube.Deployment, "cnpg-controller-manager", "cnpg-system")
+	exit.OnErrorWithMessage(err, "Failed to fetch cloud native-pg operator deployment")
+	var imageVersion string
+	if deploymentInterface != nil {
+		deployment := deploymentInterface.(*appv1.Deployment)
+		image := deployment.Spec.Template.Spec.Containers[0].Image
+		imageParts := strings.Split(image, ":")
+		imageVersion = imageParts[len(imageParts)-1]
+	}
+
+	url := buildURL(imageVersion)
+	installOperator(clusters.Target, url)
+	err = kube.WaitForPodsReady(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
 	exit.OnErrorWithMessage(err, "Failed to wait for CNPG pods to be ready")
 
 	addClustersetDNS(clusters.Origin, resources)
 	exportRWServices(clusters, clusters.Origin, resources)
 	createReplicaClusters(clusters, resources)
 }
-func installOperator(c kube.Cluster) {
+func installOperator(c kube.Cluster, url string) {
+
 	logger.Info("Installing cloud native-pg operator")
-	exit.OnErrorWithMessage(c.CreateResourcesFromURL(constants.CNPGOperatorURL, "cnpg-system"), "failed installing cloud native-pg operator")
+	exit.OnErrorWithMessage(c.CreateResourcesFromURL(url, "cnpg-system"), "failed installing cloud native-pg operator")
+}
+
+func buildURL(imageVersion string) string {
+	parts := strings.Split(imageVersion, ".")
+	if len(parts) < 2 {
+		return ""
+	}
+	majorMinor := parts[0] + "." + parts[1]
+	return fmt.Sprintf(
+		"https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-%s/releases/cnpg-%s.yaml",
+		majorMinor, imageVersion,
+	)
 }
 
 func convertToCluster(data map[string]interface{}) (*apiv1.Cluster, error) {
@@ -369,8 +396,10 @@ func scanExistingDatabases(c kube.Cluster) bool {
 		"v1",
 		"clusters",
 	)
+	if err.Error() == "the server could not find the requested resource" {
+		return false
+	}
 	exit.OnErrorWithMessage(err, "Error fetching custom resources")
-
 	if len(resources) == 0 {
 		return false
 	}
