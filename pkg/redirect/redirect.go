@@ -5,6 +5,8 @@ import (
 	"clustershift/internal/exit"
 	"clustershift/internal/kube"
 	"clustershift/internal/logger"
+	"clustershift/internal/migration"
+	"clustershift/internal/prompt"
 	"fmt"
 	"strconv"
 
@@ -25,10 +27,14 @@ func InitializeRequestForwarding(c kube.Clusters) {
 	createHttpProxyDeployment(c.Origin, ip)
 }
 
-func EnableRequestForwarding(c kube.Clusters) {
+func EnableRequestForwarding(c kube.Clusters, opts prompt.MigrationOptions, resources migration.Resources) {
 	logger.Info("Enable request forwarding from origin")
-	err := c.Origin.CreateResourcesFromURL(constants.HttpProxyIngressURL, "clustershift")
-	exit.OnErrorWithMessage(err, "Failed to create resources from URL")
+	if opts.Rerouting == prompt.ReroutingClustershift {
+		err := c.Origin.CreateResourcesFromURL(constants.HttpProxyIngressURL, "clustershift")
+		exit.OnErrorWithMessage(err, "Failed to create resources from URL")
+	} else {
+		Redirect(c, resources)
+	}
 }
 
 func getLoadbalancerIP(c kube.Cluster) (string, error) {
