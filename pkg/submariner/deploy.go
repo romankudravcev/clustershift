@@ -20,6 +20,7 @@ func DeployBroker(c cluster.ClusterOptions) {
 		RepoName:    constants.SubmarinerRepoName,
 		RepoURL:     constants.SubmarinerRepoURL,
 		ReleaseName: constants.SubmarinerBrokerNamespace,
+		Namespace:   constants.SubmarinerBrokerNamespace,
 		ChartName:   constants.SubmarinerBrokerChartName,
 		Wait:        true,
 		Version:     constants.SubmarinerVersion,

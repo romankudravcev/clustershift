@@ -26,6 +26,7 @@ func JoinCluster(c cluster.ClusterOptions, s SubmarinerJoinOptions) {
 		RepoName:    constants.SubmarinerRepoName,
 		RepoURL:     constants.SubmarinerRepoURL,
 		ReleaseName: constants.SubmarinerOperatorNamespace,
+		Namespace:   constants.SubmarinerOperatorNamespace,
 		ChartName:   constants.SubmarinerOperatorChartName,
 		Values:      values,
 		Wait:        true,
