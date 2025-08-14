@@ -42,7 +42,7 @@ func Migrate(clusters kube.Clusters, resources migration.Resources) {
 
 	url := buildURL(imageVersion)
 	installOperator(clusters.Target, url)
-	err = kube.WaitForPodsReady(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
+	err = kube.WaitForPodsReadyByLabel(clusters.Target, constants.CNPGLabelSelector, constants.CNPGNamespace, 90*time.Second)
 	exit.OnErrorWithMessage(err, "Failed to wait for CNPG pods to be ready")
 
 	addClustersetDNS(clusters.Origin, resources)
@@ -396,10 +396,12 @@ func scanExistingDatabases(c kube.Cluster) bool {
 		"v1",
 		"clusters",
 	)
-	if err.Error() == "the server could not find the requested resource" {
-		return false
+	if err != nil {
+		if err.Error() == "the server could not find the requested resource" {
+			return false
+		}
+		exit.OnErrorWithMessage(err, "Error fetching custom resources")
 	}
-	exit.OnErrorWithMessage(err, "Error fetching custom resources")
 	if len(resources) == 0 {
 		return false
 	}
