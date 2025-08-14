@@ -27,7 +27,7 @@ func scanExistingDatabases(c kube.Cluster) []appsv1.StatefulSet {
 
 	var matches []appsv1.StatefulSet
 	for _, sts := range statefulSets.Items {
-		if sts.OwnerReferences[0].Kind == "MongoDBCommunity" {
+		if len(sts.OwnerReferences) > 0 && sts.OwnerReferences[0].Kind == "MongoDBCommunity" {
 			continue
 		}
 		for _, container := range sts.Spec.Template.Spec.Containers {
