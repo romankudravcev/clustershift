@@ -116,5 +116,19 @@ func CleanResourceForCreation(resource interface{}) interface{} {
 		}
 	}
 
+	// Copy RoleRef and Subjects for ClusterRoleBinding
+	if resourceValue.Type().Name() == "ClusterRoleBinding" {
+		roleRef := resourceValue.FieldByName("RoleRef")
+		newRoleRef := newResource.FieldByName("RoleRef")
+		if roleRef.IsValid() && newRoleRef.IsValid() {
+			newRoleRef.Set(roleRef)
+		}
+		subjects := resourceValue.FieldByName("Subjects")
+		newSubjects := newResource.FieldByName("Subjects")
+		if subjects.IsValid() && newSubjects.IsValid() {
+			newSubjects.Set(subjects)
+		}
+	}
+
 	return newResource.Addr().Interface()
 }
