@@ -9,11 +9,18 @@ import (
 	"strings"
 )
 
+const (
+	//username = "admin"
+	//password = "admin123"
+	username = "my-user"
+	password = "password"
+)
+
 // execMongoCommand executes a MongoDB command using a client pod
 func execMongoCommand(client *Client, mongoHost, command string) (string, error) {
 	cmd := []string{
 		mongoshCommand,
-		fmt.Sprintf("mongodb://my-user:password@%s/admin?authSource=admin", mongoHost),
+		fmt.Sprintf("mongodb://%s:%s@%s/admin?authSource=admin", username, password, mongoHost),
 		"--eval", command,
 	}
 
@@ -35,7 +42,7 @@ func execMongoScript(client *Client, mongoHost, script string) (string, error) {
 func GetMongoHosts(client *Client, mongoHost string) ([]string, error) {
 	cmd := []string{
 		mongoshCommand,
-		fmt.Sprintf("mongodb://%s", mongoHost),
+		fmt.Sprintf("mongodb://%s:%s@%s/admin?authSource=admin", username, password, mongoHost),
 		"--eval", "JSON.stringify(rs.conf())",
 	}
 
@@ -75,7 +82,7 @@ func GetMongoHosts(client *Client, mongoHost string) ([]string, error) {
 func GetMongoHostsAuthenticated(client *Client, mongoHost string) ([]string, error) {
 	cmd := []string{
 		mongoshCommand,
-		fmt.Sprintf("mongodb://my-user:password@%s/admin?authSource=admin", mongoHost),
+		fmt.Sprintf("mongodb://%s:%s@%s/admin?authSource=admin", username, password, mongoHost),
 		"--eval", "JSON.stringify(rs.conf())",
 	}
 
@@ -115,7 +122,7 @@ func GetMongoHostsAuthenticated(client *Client, mongoHost string) ([]string, err
 func GetPrimaryMongoHost(client *Client, mongoHost string) (string, error) {
 	cmd := []string{
 		mongoshCommand,
-		fmt.Sprintf("mongodb://my-user:password@%s:27017/admin?authSource=admin", mongoHost),
+		fmt.Sprintf("mongodb://%s:%s@%s:27017/admin?authSource=admin", username, password, mongoHost),
 		"--eval", "JSON.stringify(rs.status())",
 	}
 
@@ -147,7 +154,7 @@ func GetPrimaryMongoHost(client *Client, mongoHost string) (string, error) {
 	for _, member := range status.Members {
 		if member.StateStr == primaryState {
 			// Return string before first dot
-			parts := strings.Split(member.Name, ".")
+			parts := strings.Split(member.Name, ":")
 			return parts[0], nil
 		}
 	}
@@ -158,7 +165,7 @@ func GetPrimaryMongoHost(client *Client, mongoHost string) (string, error) {
 func isMongoMemberSecondary(client *Client, mongoHost, targetHost string) (bool, error) {
 	cmd := []string{
 		mongoshCommand,
-		fmt.Sprintf("mongodb://my-user:password@%s:27017/admin?authSource=admin", mongoHost),
+		fmt.Sprintf("mongodb://%s:%s@%s:27017/admin?authSource=admin", username, password, mongoHost),
 		"--eval", "JSON.stringify(rs.status())",
 		"--quiet",
 	}
@@ -210,6 +217,22 @@ db.createUser({
     { role: "restore", db: "admin" },
     { role: "backup", db: "admin" },
     { role: "root", db: "admin" }
+  ]
+})
+`
+	_, err := execMongoScript(client, mongoHost, script)
+	return err
+}
+
+func CreateTestUser(client *Client, mongoHost string) error {
+	script := `
+db.createUser({
+  user: "testdb_user",
+  pwd: "password",
+  roles: [
+    { role: "readWrite", db: "testdb" },
+    { role: "dbAdmin", db: "testdb" },
+    { role: "userAdmin", db: "testdb" }
   ]
 })
 `

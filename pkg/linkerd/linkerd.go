@@ -48,6 +48,9 @@ func installCluster(c kube.Cluster, certs cert.LinkerdCerts) {
 				},
 			},
 		},
+		"proxy": map[string]interface{}{
+			"nativeSidecar": true,
+		},
 	}
 
 	// Convert the map to a YAML string
@@ -58,7 +61,18 @@ func installCluster(c kube.Cluster, certs cert.LinkerdCerts) {
 	deployEdgeChart(c.ClusterOptions, constants.LinkerdControlPlaneChartName, "linkerd-control-plane", string(controlPlaneValues))
 
 	logger.Debug("Install linkerd-multicluster")
-	deployMulticlusterChart(c.ClusterOptions, constants.LinkerdMultiClusterChartName, "linkerd-multicluster", "")
+	multiclusterValuesMap := map[string]interface{}{
+		"controllerDefaults": map[string]interface{}{
+			"enableHeadlessServices": true,
+		},
+	}
+
+	// Convert the map to a YAML string
+	multiclusterValues, err := yaml.Marshal(multiclusterValuesMap)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to marshal multicluster YAML: %v", err))
+	}
+	deployMulticlusterChart(c.ClusterOptions, constants.LinkerdMultiClusterChartName, "linkerd-multicluster", string(multiclusterValues))
 }
 
 func linkClusterDep(fromCluster kube.Cluster, toCluster kube.Cluster, fromClusterName string) {
