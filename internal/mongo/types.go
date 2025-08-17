@@ -32,10 +32,12 @@ type ReplicaSetStatus struct {
 
 // MigrationContext holds context for MongoDB migration operations
 type MigrationContext struct {
-	StatefulSet  appsv1.StatefulSet
-	Service      v1.Service
-	PrimaryHost  string
-	OriginHosts  []string
-	UpdatedHosts []string
-	TargetHosts  []string
+	StatefulSet   appsv1.StatefulSet
+	Service       v1.Service
+	OriginService v1.Service
+	TargetService v1.Service
+	PrimaryHost   string
+	OriginHosts   []string
+	UpdatedHosts  []string
+	TargetHosts   []string
 }
