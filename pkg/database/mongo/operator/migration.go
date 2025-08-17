@@ -54,6 +54,8 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 	mongoClientTarget := mongo.NewMongoClient(c.Target, "default")
 
 	for _, mongoDB := range mongoDBs {
+		// Save original member count before deployment
+		originalMemberCount := mongoDB.Spec.Members
 
 		err := deployMongoDBCluster(c.Target, mongoDB)
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to deploy MongoDB cluster %s in target cluster", mongoDB.Name))
@@ -68,10 +70,10 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 
 		originPrimary, err := mongo.GetPrimaryMongoHost(mongoClientOrigin, service.Name+"."+service.Namespace+".svc.cluster.local")
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to get primary MongoDB host for cluster %s in origin cluster", mongoDB.Name))
-		originPrimaryHost := originPrimary + "." + service.Name + "." + service.Namespace + ".svc.cluster.local"
+		originPrimaryHost := originPrimary
 		targetPrimary, err := mongo.GetPrimaryMongoHost(mongoClientTarget, service.Name+"."+service.Namespace+".svc.cluster.local")
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to get primary MongoDB host for cluster %s in target cluster", mongoDB.Name))
-		targetPrimaryHost := targetPrimary + "." + service.Name + "." + service.Namespace + ".svc.cluster.local"
+		targetPrimaryHost := targetPrimary
 
 		logger.Info(fmt.Sprintf("Primary MongoDB host in origin cluster: %s", originPrimaryHost))
 		logger.Info(fmt.Sprintf("Primary MongoDB host in target cluster: %s", targetPrimaryHost))
@@ -82,7 +84,7 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to create sync user for MongoDB cluster %s in target cluster", mongoDB.Name))
 
 		originURI := getMongoURI(c.Origin, mongoDB, service, resources, mongoClientOrigin, originPrimaryHost)
-		targetURI := getMongoURI(c.Target, mongoDB, service, resources, mongoClientTarget, targetPrimaryHost)
+		targetURI := getMongoURI(c.Target, mongoDB, service, resources, mongoClientTarget, targetPrimaryHost) + "&directConnection=true"
 
 		deployMongoSyncer(c.Origin, originURI, targetURI)
 
@@ -92,6 +94,13 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to delete MongoDB client pod in origin cluster for cluster %s", mongoDB.Name))
 		err = mongoClientTarget.DeleteClientPod()
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to delete MongoDB client pod in target cluster for cluster %s", mongoDB.Name))
+
+		err = mongo.CreateTestUser(mongoClientTarget, targetPrimaryHost)
+		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to create test user for MongoDB cluster %s in target cluster", mongoDB.Name))
+
+		// Restore original member count in target cluster
+		err = restoreMongoDBMemberCount(c.Target, mongoDB, originalMemberCount)
+		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to restore MongoDB member count for cluster %s in target cluster", mongoDB.Name))
 	}
 
 }
@@ -285,6 +294,9 @@ func scanExistingDatabases(c kube.Cluster) ([]mongov1.MongoDBCommunity, error) {
 func deployMongoDBCluster(c kube.Cluster, mongoDB mongov1.MongoDBCommunity) error {
 	logger.Debug(fmt.Sprintf("Deploying MongoDB cluster %s in namespace %s", mongoDB.Name, mongoDB.Namespace))
 
+	// Step down member count to 1 before cleaning
+	mongoDB.Spec.Members = 1
+
 	cleanedDataInterface := kube.CleanResourceForCreation(mongoDB)
 
 	jsonData, err := json.Marshal(cleanedDataInterface)
@@ -295,6 +307,11 @@ func deployMongoDBCluster(c kube.Cluster, mongoDB mongov1.MongoDBCommunity) erro
 	var cleanedData map[string]interface{}
 	if err := json.Unmarshal(jsonData, &cleanedData); err != nil {
 		return err
+	}
+
+	// Ensure member count is set to 1 in the cleaned data
+	if spec, exists := cleanedData["spec"].(map[string]interface{}); exists {
+		spec["members"] = 1
 	}
 
 	err = c.CreateCustomResource(mongoDB.Namespace, cleanedData)
@@ -324,4 +341,55 @@ func waitForJobCompletion(c kube.Cluster, namespace, jobName string) {
 			logger.Debug(fmt.Sprintf("Job %s in namespace %s not completed yet, waiting...", jobName, namespace))
 		}
 	}
+}
+
+func restoreMongoDBMemberCount(c kube.Cluster, mongoDB mongov1.MongoDBCommunity, memberCount int) error {
+	logger.Debug(fmt.Sprintf("Restoring MongoDB cluster %s member count to %d", mongoDB.Name, memberCount))
+
+	// Fetch the existing MongoDB cluster resource
+	resource, err := c.FetchCustomResource(
+		"mongodbcommunity.mongodb.com",
+		"v1",
+		"mongodbcommunity",
+		mongoDB.Namespace,
+		mongoDB.Name,
+	)
+	exit.OnErrorWithMessage(err, "Failed to fetch MongoDB Community resources")
+
+	var mongoDBUpdate mongov1.MongoDBCommunity
+	jsonData, err := json.Marshal(resource)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(jsonData, &mongoDBUpdate); err != nil {
+		return err
+	}
+
+	// Update the member count
+	mongoDBUpdate.Spec.Members = memberCount
+
+	cleanedDataInterface := kube.CleanResourceForCreation(mongoDBUpdate)
+
+	jsonData, err = json.Marshal(cleanedDataInterface)
+	if err != nil {
+		return err
+	}
+
+	var cleanedData map[string]interface{}
+	if err := json.Unmarshal(jsonData, &cleanedData); err != nil {
+		return err
+	}
+
+	// Ensure member count is set to the desired value in the cleaned data
+	if spec, exists := cleanedData["spec"].(map[string]interface{}); exists {
+		spec["members"] = memberCount
+	}
+
+	err = c.UpdateCustomResource(mongoDBUpdate.Namespace, cleanedData)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
