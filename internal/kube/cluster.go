@@ -129,6 +129,8 @@ func (c Cluster) AddAnnotation(resource metav1.Object, annotationKey, annotation
 		_, err = c.Clientset.CoreV1().Pods(r.Namespace).Patch(context.TODO(), r.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
 	case *v1.Service:
 		_, err = c.Clientset.CoreV1().Services(r.Namespace).Patch(context.TODO(), r.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
+	case *v1.Namespace:
+		_, err = c.Clientset.CoreV1().Namespaces().Patch(context.TODO(), r.Name, types.StrategicMergePatchType, patchBytes, metav1.PatchOptions{})
 	default:
 		return fmt.Errorf("unsupported resource type: %T", resource)
 	}
