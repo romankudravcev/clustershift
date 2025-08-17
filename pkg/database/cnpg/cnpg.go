@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	appv1 "k8s.io/api/apps/v1"
+	v1core "k8s.io/api/core/v1"
 	"strings"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func Migrate(clusters kube.Clusters, resources migration.Resources) {
+func Migrate(clusters kube.Clusters, resources migration.Resources, opts prompt.MigrationOptions) {
 	logger.Info("Scanning for existing cnpg databases")
 	exists := scanExistingDatabases(clusters.Origin)
 
@@ -46,7 +47,7 @@ func Migrate(clusters kube.Clusters, resources migration.Resources) {
 	exit.OnErrorWithMessage(err, "Failed to wait for CNPG pods to be ready")
 
 	addClustersetDNS(clusters.Origin, resources)
-	exportRWServices(clusters, clusters.Origin, resources)
+	exportRWServices(clusters, clusters.Origin, resources, opts)
 	createReplicaClusters(clusters, resources)
 }
 func installOperator(c kube.Cluster, url string) {
@@ -259,11 +260,21 @@ func createReplicaClusters(c kube.Clusters, migrationResources migration.Resourc
 		// Wait for replica cluster to be ready
 		err = kube.WaitForCNPGClusterReady(c.Target.DynamicClientset, originCluster.Name, originCluster.Namespace, 1*time.Hour)
 		exit.OnErrorWithMessage(err, "Timeout while waiting for replica cluster bootstrap")
+		if migrationResources.GetNetworkingTool() == prompt.NetworkingToolLinkerd {
+			mirrorLabel := map[string]string{
+				"mirror.linkerd.io/exported": "true",
+			}
+			serviceName := fmt.Sprintf("%s-rw", originCluster.Name)
+
+			err = c.Target.AddLabel(kube.Service, serviceName, originCluster.Namespace, mirrorLabel)
+			exit.OnErrorWithMessage(err, "Failed to export service")
+		}
+
 	}
 	logger.Info("Created replica clusters")
 }
 
-func exportRWServices(clusters kube.Clusters, c kube.Cluster, migrationResources migration.Resources) {
+func exportRWServices(clusters kube.Clusters, c kube.Cluster, migrationResources migration.Resources, opts prompt.MigrationOptions) {
 	logger.Info("Exporting cnpg rw services")
 
 	// Fetch all cnpg clusters
@@ -281,9 +292,23 @@ func exportRWServices(clusters kube.Clusters, c kube.Cluster, migrationResources
 		namespace := resource["metadata"].(map[string]interface{})["namespace"].(string)
 		serviceName := fmt.Sprintf("%s-rw", clusterName)
 
-		if migrationResources.GetNetworkingTool() == prompt.NetworkingToolSkupper {
+		if migrationResources.GetNetworkingTool() == prompt.NetworkingToolSkupper && opts.Rerouting != prompt.ReroutingSkupper {
 			skupper.CreateSiteConnection(clusters, namespace)
 		}
+
+		if migrationResources.GetNetworkingTool() == prompt.NetworkingToolLinkerd && opts.Rerouting != prompt.ReroutingLinkerd {
+			logger.Info(fmt.Sprintf("Adding linkerd.io/inject=enabled annotation to namespace %s", namespace))
+
+			// Fetch the namespace object first
+			namespaceInterface, err := clusters.Target.FetchResource(kube.Namespace, namespace, "")
+			exit.OnErrorWithMessage(err, "Failed to fetch namespace")
+			namespaceObj := namespaceInterface.(*v1core.Namespace)
+
+			// Add the linkerd injection annotation
+			err = clusters.Target.AddAnnotation(namespaceObj, "linkerd.io/inject", "enabled")
+			exit.OnErrorWithMessage(err, "Failed to add linkerd inject annotation to namespace")
+		}
+
 		migrationResources.ExportService(c, namespace, serviceName)
 	}
 
