@@ -5,6 +5,7 @@ import (
 	"clustershift/internal/kube"
 	"clustershift/internal/migration"
 	"clustershift/internal/mongo"
+	"clustershift/internal/prompt"
 	"context"
 	"fmt"
 	appsv1 "k8s.io/api/apps/v1"
@@ -102,7 +103,15 @@ func UpdateMongoHosts(hosts []string, resources migration.Resources, service v1.
 		for _, host := range hosts {
 			podName, serviceName, namespace, err := extractMetadataFromDNSName(host)
 			exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to extract metadata from DNS name %s", host))
-			updatedHost := resources.GetHeadlessDNSName(podName, serviceName, namespace, c.Name) + ":" + mongoPort
+			var updatedHost string
+			if resources.GetNetworkingTool() == prompt.NetworkingToolSubmariner {
+				updatedHost = resources.GetHeadlessDNSName(podName, serviceName, namespace, c.Name) + ":" + mongoPort
+			} else if resources.GetNetworkingTool() == prompt.NetworkingToolSkupper {
+				updatedHost = fmt.Sprintf("%s.%s-%s.%s.svc.cluster.local:27017", podName, serviceName, c.Name, namespace)
+			} else if resources.GetNetworkingTool() == prompt.NetworkingToolLinkerd {
+				updatedHost = fmt.Sprintf("%s.%s-%s.%s.svc.cluster.local:27017", podName, serviceName, c.Name, namespace)
+			}
+
 			updatedHosts = append(updatedHosts, updatedHost)
 		}
 	} else {

@@ -12,6 +12,7 @@ import (
 type Resources interface {
 	InstallNetworkingTool(clusters kube.Clusters)
 	GetDNSName(name, namespace string) string
+	GetPostgresDNSName(name, namespace string) string
 	GetHeadlessDNSName(podName, serviceName, namespace, clusterId string) string
 	ExportService(c kube.Cluster, namespace string, name string)
 	GetNetworkingTool() string
@@ -28,6 +29,10 @@ func (s *SubmarinerResources) InstallNetworkingTool(clusters kube.Clusters) {
 
 func (s *SubmarinerResources) GetDNSName(name, namespace string) string {
 	return fmt.Sprintf("origin.%s-rw.%s.svc.clusterset.local", name, namespace)
+}
+
+func (s *SubmarinerResources) GetPostgresDNSName(name, namespace string) string {
+	return fmt.Sprintf("origin.%s.%s.svc.clusterset.local", name, namespace)
 }
 
 func (s *SubmarinerResources) GetHeadlessDNSName(podName, serviceName, namespace, clusterId string) string {
@@ -58,6 +63,10 @@ func (l *LinkerdResources) GetDNSName(name, namespace string) string {
 	return fmt.Sprintf("%s-rw-origin.%s.svc.cluster.local", name, namespace)
 }
 
+func (l *LinkerdResources) GetPostgresDNSName(name, namespace string) string {
+	return fmt.Sprintf("%s-origin.%s.svc.cluster.local", name, namespace)
+}
+
 // GetHeadlessDNSName TODO - This is a temporary solution, we need to find a way to handle headless services properly
 func (l *LinkerdResources) GetHeadlessDNSName(podName, serviceName, namespace, clusterId string) string {
 	return fmt.Sprintf("%s.%s.%s.%s.svc.clusterset.local", podName, clusterId, serviceName, namespace)
@@ -72,7 +81,9 @@ func (l *LinkerdResources) GetNetworkingTool() string {
 }
 
 func (l *LinkerdResources) GetCNPGHostname(clusterName, dbClusterName, namespace string) string {
-	return fmt.Sprintf("%s.%s-rw.%s.svc.clusterset.local", clusterName, dbClusterName, namespace)
+	// For Linkerd, the mirrored service name is constructed as: {original-service-name}-rw-{cluster-name}
+	// This matches how addRWServiceToYaml constructs the service name
+	return fmt.Sprintf("%s-rw-%s.%s.svc.cluster.local", dbClusterName, clusterName, namespace)
 }
 
 type SkupperResources struct {
@@ -85,6 +96,10 @@ func (s *SkupperResources) InstallNetworkingTool(clusters kube.Clusters) {
 
 func (s *SkupperResources) GetDNSName(name, namespace string) string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", name, namespace)
+}
+
+func (s *SkupperResources) GetPostgresDNSName(name, namespace string) string {
+	return fmt.Sprintf("%s-origin.%s.svc.cluster.local", name, namespace)
 }
 
 // GetHeadlessDNSName TODO - This is a temporary solution, we need to find a way to handle headless services properly
