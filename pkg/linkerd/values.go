@@ -24,6 +24,7 @@ type (
 		ControllerImage                string   `yaml:"controllerImage"`
 		ControllerImageVersion         string   `yaml:"controllerImageVersion"`
 		Gateway                        *Gateway `yaml:"gateway"`
+		EnableHeadlessServices         bool     `yaml:"enableHeadlessServices"`
 		IdentityTrustDomain            string   `yaml:"identityTrustDomain"`
 		LinkerdNamespace               string   `yaml:"linkerdNamespace"`
 		LinkerdVersion                 string   `yaml:"linkerdVersion"`
@@ -270,6 +271,7 @@ func NewLinkValues() *Values {
 		ControllerImage:        "cr.l5d.io/linkerd/controller",
 		ControllerImageVersion: "edge-24.2.5",
 		EnablePodAntiAffinity:  true,
+		EnableHeadlessServices: true,
 		Gateway: &Gateway{
 			Enabled: true,
 			Probe: &Probe{
