@@ -4,6 +4,7 @@ import (
 	"clustershift/internal/exit"
 	"clustershift/internal/kube"
 	"clustershift/internal/migration"
+	"clustershift/internal/prompt"
 	"fmt"
 	taefikv1 "github.com/traefik/traefik/v3/pkg/provider/kubernetes/crd/traefikio/v1alpha1"
 	v1 "k8s.io/api/core/v1"
@@ -32,7 +33,7 @@ func exportAllServices(c kube.Clusters, migrationResource migration.Resources) e
 	for _, service := range serviceList.Items {
 		migrationResource.ExportService(c.Target, service.Namespace, service.Name)
 
-		if migrationResource.GetNetworkingTool() == "submariner" {
+		if migrationResource.GetNetworkingTool() == "Submariner" {
 			err = createRemoteService(c.Origin, migrationResource, service)
 			if err != nil {
 				return fmt.Errorf("failed to create remote service: %v", err)
@@ -59,13 +60,19 @@ func updateIngressRoutes(c kube.Cluster, migrationResource migration.Resources) 
 		// replace the service name with the exported service name
 		for i, route := range ingressRoute.Spec.Routes {
 			for j, service := range route.Services {
-				if migrationResource.GetNetworkingTool() == "submariner" {
+				if migrationResource.GetNetworkingTool() == prompt.NetworkingToolSubmariner {
 					// For Submariner, we need to use the remote service name
 					remoteServiceName := service.Name + "-remote"
 					ingressRoute.Spec.Routes[i].Services[j].Name = remoteServiceName
+				} else if migrationResource.GetNetworkingTool() == prompt.NetworkingToolSkupper {
+					remoteServiceName := service.Name + "-target"
+					ingressRoute.Spec.Routes[i].Services[j].Name = remoteServiceName
+				} else if migrationResource.GetNetworkingTool() == prompt.NetworkingToolLinkerd {
+					remoteServiceName := service.Name + "-target"
+					ingressRoute.Spec.Routes[i].Services[j].Name = remoteServiceName
 				} else {
 					// For other networking tools, we can keep the original service name
-					ingressRoute.Spec.Routes[i].Services[j].Name = migrationResource.GetDNSName(service.Name, ingressRoute.Namespace)
+					ingressRoute.Spec.Routes[i].Services[j].Name = fmt.Sprintf("target.%s.%s.svc.clusterset.local", service.Name, ingressRoute.Namespace)
 				}
 			}
 		}
@@ -88,7 +95,7 @@ func createRemoteService(c kube.Cluster, migrationResource migration.Resources, 
 		},
 		Spec: v1.ServiceSpec{
 			Type:         v1.ServiceTypeExternalName,
-			ExternalName: migrationResource.GetDNSName(service.Name, service.Namespace),
+			ExternalName: fmt.Sprintf("target.%s.%s.svc.clusterset.local", service.Name, service.Namespace),
 			Ports: []v1.ServicePort{
 				{
 					Name:     "http",
@@ -100,7 +107,7 @@ func createRemoteService(c kube.Cluster, migrationResource migration.Resources, 
 		},
 	}
 
-	err := c.CreateResource(kube.Service, remoteService.Name, remoteService.Namespace, remoteService)
+	err := c.CreateResource(kube.Service, remoteService.Namespace, remoteService)
 	if err != nil {
 		return fmt.Errorf("failed to create remote service %s: %v", service.Name, err)
 	}
