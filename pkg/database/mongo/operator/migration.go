@@ -8,7 +8,10 @@ import (
 	"clustershift/internal/logger"
 	"clustershift/internal/migration"
 	"clustershift/internal/mongo"
+	"clustershift/internal/prompt"
 	"clustershift/pkg/database/mongo/statefulset"
+	"clustershift/pkg/linkerd"
+	"clustershift/pkg/skupper"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -30,7 +33,7 @@ type OperatorInfo struct {
 	IsPresent bool
 }
 
-func Migrate(c kube.Clusters, resources migration.Resources) {
+func Migrate(c kube.Clusters, resources migration.Resources, opts prompt.MigrationOptions) {
 	operatorInfo, err := fetchOperatorInfo(c.Origin)
 	if err != nil {
 		exit.OnErrorWithMessage(err, "Failed to fetch MongoDB operator information")
@@ -65,9 +68,22 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 		service, err := getServiceForStatefulSet(mongoDB, c.Origin)
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to get service for MongoDB cluster %s in origin cluster", mongoDB.Name))
 
-		resources.ExportService(c.Origin, service.Namespace, service.Name)
+		if resources.GetNetworkingTool() == prompt.NetworkingToolSkupper && opts.Rerouting != prompt.ReroutingSkupper {
+			skupper.CreateSiteConnection(c, mongoDB.Namespace)
+		}
+
+		if resources.GetNetworkingTool() == prompt.NetworkingToolSubmariner {
+			resources.ExportService(c.Origin, service.Namespace, service.Name)
+		}
+		time.Sleep(5 * time.Second)
 		resources.ExportService(c.Target, service.Namespace, service.Name)
 
+		if resources.GetNetworkingTool() == prompt.NetworkingToolLinkerd {
+			err := linkerd.InjectNamespace(c.Origin, "default")
+			exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to inject Linkerd into namespace %s in origin cluster", service.Namespace))
+		}
+
+		time.Sleep(5 * time.Second)
 		originPrimary, err := mongo.GetPrimaryMongoHost(mongoClientOrigin, service.Name+"."+service.Namespace+".svc.cluster.local")
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to get primary MongoDB host for cluster %s in origin cluster", mongoDB.Name))
 		originPrimaryHost := originPrimary
@@ -86,17 +102,21 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 		originURI := getMongoURI(c.Origin, mongoDB, service, resources, mongoClientOrigin, originPrimaryHost)
 		targetURI := getMongoURI(c.Target, mongoDB, service, resources, mongoClientTarget, targetPrimaryHost) + "&directConnection=true"
 
+		if resources.GetNetworkingTool() == prompt.NetworkingToolSkupper || resources.GetNetworkingTool() == prompt.NetworkingToolLinkerd {
+			targetURI = fmt.Sprintf("mongodb://clusteradmin:password1@%s-target.%s.svc.cluster.local:27017/?authSource=admin&directConnection=true", service.Name, service.Namespace)
+		}
+
 		deployMongoSyncer(c.Origin, originURI, targetURI)
 
 		waitForJobCompletion(c.Origin, "default", "mongosyncer-job")
+
+		err = mongo.CreateTestUser(mongoClientTarget, targetPrimaryHost)
+		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to create test user for MongoDB cluster %s in target cluster", mongoDB.Name))
 
 		err = mongoClientOrigin.DeleteClientPod()
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to delete MongoDB client pod in origin cluster for cluster %s", mongoDB.Name))
 		err = mongoClientTarget.DeleteClientPod()
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to delete MongoDB client pod in target cluster for cluster %s", mongoDB.Name))
-
-		err = mongo.CreateTestUser(mongoClientTarget, targetPrimaryHost)
-		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to create test user for MongoDB cluster %s in target cluster", mongoDB.Name))
 
 		// Restore original member count in target cluster
 		err = restoreMongoDBMemberCount(c.Target, mongoDB, originalMemberCount)
@@ -109,8 +129,11 @@ func getMongoURI(c kube.Cluster, mongoDB mongov1.MongoDBCommunity, service corev
 	hosts, err := mongo.GetMongoHostsAuthenticated(mongoClient, host)
 	exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to get MongoDB hosts for cluster %s", mongoDB.Name))
 
-	updatedHosts := statefulset.UpdateMongoHosts(hosts, resources, service, c)
+	updatedHosts := hosts
 
+	if resources.GetNetworkingTool() == prompt.NetworkingToolSubmariner {
+		updatedHosts = statefulset.UpdateMongoHosts(hosts, resources, service, c)
+	}
 	uri := fmt.Sprintf(
 		"mongodb://clusteradmin:password1@%s/?authSource=admin",
 		strings.Join(updatedHosts, ","),
@@ -356,37 +379,26 @@ func restoreMongoDBMemberCount(c kube.Cluster, mongoDB mongov1.MongoDBCommunity,
 	)
 	exit.OnErrorWithMessage(err, "Failed to fetch MongoDB Community resources")
 
-	var mongoDBUpdate mongov1.MongoDBCommunity
+	// Convert the resource to a map for easier manipulation
 	jsonData, err := json.Marshal(resource)
 	if err != nil {
 		return err
 	}
 
-	if err := json.Unmarshal(jsonData, &mongoDBUpdate); err != nil {
+	var resourceMap map[string]interface{}
+	if err := json.Unmarshal(jsonData, &resourceMap); err != nil {
 		return err
 	}
 
-	// Update the member count
-	mongoDBUpdate.Spec.Members = memberCount
-
-	cleanedDataInterface := kube.CleanResourceForCreation(mongoDBUpdate)
-
-	jsonData, err = json.Marshal(cleanedDataInterface)
-	if err != nil {
-		return err
-	}
-
-	var cleanedData map[string]interface{}
-	if err := json.Unmarshal(jsonData, &cleanedData); err != nil {
-		return err
-	}
-
-	// Ensure member count is set to the desired value in the cleaned data
-	if spec, exists := cleanedData["spec"].(map[string]interface{}); exists {
+	// Update the member count in the spec
+	if spec, exists := resourceMap["spec"].(map[string]interface{}); exists {
 		spec["members"] = memberCount
+	} else {
+		return fmt.Errorf("spec field not found in MongoDB resource")
 	}
 
-	err = c.UpdateCustomResource(mongoDBUpdate.Namespace, cleanedData)
+	// Update the resource while preserving all metadata including resourceVersion
+	err = c.UpdateCustomResource(mongoDB.Namespace, resourceMap)
 	if err != nil {
 		return err
 	}
