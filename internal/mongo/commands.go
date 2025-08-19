@@ -9,11 +9,12 @@ import (
 	"strings"
 )
 
+// TODO: IMPLEMENT USER AND PASSWORD FETCHING FROM ENVIRONMENT VARIABLES OR CONFIGURATION
 const (
-	//username = "admin"
-	//password = "admin123"
-	username = "my-user"
-	password = "password"
+	username = "admin"
+	password = "admin123"
+	//username = "my-user"
+	//password = "password"
 )
 
 // execMongoCommand executes a MongoDB command using a client pod
@@ -21,6 +22,15 @@ func execMongoCommand(client *Client, mongoHost, command string) (string, error)
 	cmd := []string{
 		mongoshCommand,
 		fmt.Sprintf("mongodb://%s:%s@%s/admin?authSource=admin", username, password, mongoHost),
+		"--eval", command,
+	}
+
+	return client.ExecMongoCommand(cmd)
+}
+
+func execMongoCommandWithoutUser(client *Client, mongoHost, command string) (string, error) {
+	cmd := []string{
+		mongoshCommand,
 		"--eval", command,
 	}
 
@@ -224,8 +234,26 @@ db.createUser({
 	return err
 }
 
+func CreateRootUser(client *Client, mongoHost string, username, password string) error {
+	script := fmt.Sprintf(`
+db = db.getSiblingDB("admin");
+db.createUser({
+  user: '%s',
+  pwd: '%s',
+  roles: [ { role: 'root', db: 'admin' } ]
+});`, username, password)
+	_, err := execMongoCommandWithoutUser(client, mongoHost, script)
+	if err == nil {
+		logger.Info("Root user created successfully")
+	} else {
+		logger.Error("Failed to create root user: %v", err)
+	}
+	return err
+}
+
 func CreateTestUser(client *Client, mongoHost string) error {
 	script := `
+db = db.getSiblingDB("testdb");
 db.createUser({
   user: "testdb_user",
   pwd: "password",
@@ -234,7 +262,7 @@ db.createUser({
     { role: "dbAdmin", db: "testdb" },
     { role: "userAdmin", db: "testdb" }
   ]
-})
+});
 `
 	_, err := execMongoScript(client, mongoHost, script)
 	return err
