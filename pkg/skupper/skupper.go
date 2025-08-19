@@ -29,12 +29,12 @@ func CreateSiteConnection(c kube.Clusters, siteNamespace string) {
 	CreateSite(c.Target, c.Target.Name+"-"+siteNamespace, siteNamespace)
 
 	// Link target to origin
-	CreateConnectionToken(c.Origin, "clustershift-token-"+c.Origin.Name, siteNamespace)
-	ExtractConnectionToken(c.Origin, c.Target, "clustershift-token-"+c.Origin.Name, siteNamespace)
+	CreateConnectionToken(c.Origin, "clustershift-token-"+c.Origin.Name+"-"+siteNamespace, siteNamespace)
+	ExtractConnectionToken(c.Origin, c.Target, "clustershift-token-"+c.Origin.Name+"-"+siteNamespace, siteNamespace)
 
 	// Link origin to target
-	CreateConnectionToken(c.Target, "clustershift-token-"+c.Target.Name, siteNamespace)
-	ExtractConnectionToken(c.Target, c.Origin, "clustershift-token-"+c.Target.Name, siteNamespace)
+	CreateConnectionToken(c.Target, "clustershift-token-"+c.Target.Name+"-"+siteNamespace, siteNamespace)
+	ExtractConnectionToken(c.Target, c.Origin, "clustershift-token-"+c.Target.Name+"-"+siteNamespace, siteNamespace)
 }
 
 func CreateSiteController(c kube.Cluster) {
