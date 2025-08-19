@@ -60,6 +60,9 @@ func (c Cluster) UpdateResource(resourceType ResourceType, name, namespace strin
 	case TraefikService:
 		_, err := c.TraefikClientset.TraefikV1alpha1().TraefikServices(namespace).Update(context.TODO(), resource.(*traefikv1alpha1.TraefikService), metav1.UpdateOptions{})
 		return err
+	case StatefulSet:
+		_, err := c.Clientset.AppsV1().StatefulSets(namespace).Update(context.TODO(), resource.(*appsv1.StatefulSet), metav1.UpdateOptions{})
+		return err
 	default:
 		return fmt.Errorf("unsupported resource type: %s", resourceType)
 	}
