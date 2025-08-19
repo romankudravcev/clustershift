@@ -17,6 +17,7 @@ func AddMongoMember(client *Client, mongoHost, newHost string) error {
 // RemoveMongoMember removes a member from the MongoDB replica set using client pod
 func RemoveMongoMember(client *Client, mongoHost, hostToRemove string) error {
 	script := fmt.Sprintf(`rs.remove("%s");`, hostToRemove)
+	logger.Info(mongoHost + " - removing" + hostToRemove + " from replica set")
 	_, err := execMongoCommand(client, mongoHost, script)
 	return err
 }
@@ -47,6 +48,25 @@ rs.reconfig(cfg, {force: true});
 	return err
 }
 
+func InitReplicaSet(client *Client, mongoHost string) error {
+	script := `
+cfg = {
+  _id: "rs0",
+  members: [
+	{ _id: 0, host: "` + mongoHost + `", priority:
+ 1 }
+  ]
+};
+rs.initiate(cfg);
+`
+	_, err := execMongoCommandWithoutUser(client, mongoHost, script)
+	if err != nil {
+		return fmt.Errorf("failed to initiate MongoDB replica set: %w", err)
+	}
+	logger.Info("MongoDB replica set initiated successfully")
+	return nil
+}
+
 // WaitForMongoMemberSecondary waits for a MongoDB member to become SECONDARY using client pod
 func WaitForMongoMemberSecondary(client *Client, mongoHost, targetHost string) error {
 	timeout := defaultTimeout
@@ -68,17 +88,31 @@ func WaitForMongoMemberSecondary(client *Client, mongoHost, targetHost string) e
 
 // OverwriteMongoHosts updates the MongoDB replica set configuration with new hosts using client pod
 func OverwriteMongoHosts(client *Client, mongoHost string, newHosts []string) error {
-	script := "cfg = rs.conf();"
+	// Build the script to update all hosts to use the new hostnames
+	script := `
+cfg = rs.conf();
+var newHosts = [`
+
 	for i, host := range newHosts {
-		script += fmt.Sprintf(`cfg.members[%d].host = "%s";`, i, host)
+		if i > 0 {
+			script += ","
+		}
+		script += fmt.Sprintf(`"%s"`, host)
 	}
-	script += "rs.reconfig(cfg);"
+
+	script += `];
+
+for (var i = 0; i < cfg.members.length && i < newHosts.length; i++) {
+  cfg.members[i].host = newHosts[i];
+}
+
+rs.reconfig(cfg, { force: true });`
 
 	_, err := execMongoCommand(client, mongoHost, script)
 	return err
 }
 
-// WaitForTargetPrimaryElection waits for a primary to be elected from target cluster using client pod
+// WaitForTargetPrimaryElection waits for a primary to be elected from target Cluster using client pod
 func WaitForTargetPrimaryElection(client *Client, ctx *MigrationContext) error {
 	// Use the first available host for checking primary status
 	var checkHost string
@@ -94,10 +128,11 @@ func WaitForTargetPrimaryElection(client *Client, ctx *MigrationContext) error {
 	interval := defaultCheckInterval
 	deadline := time.Now().Add(timeout)
 
-	logger.Info("Waiting for new primary to be elected from target cluster...")
+	logger.Info("Waiting for new primary to be elected from target Cluster...")
 
 	for time.Now().Before(deadline) {
-		newPrimary, err := GetPrimaryMongoHost(client, checkHost)
+		primaryHost := strings.Split(checkHost, ":")[0]
+		newPrimary, err := GetPrimaryMongoHost(client, primaryHost)
 		if err != nil {
 			logger.Debug(fmt.Sprintf("Could not determine current primary: %v, retrying...", err))
 			time.Sleep(interval)
@@ -107,14 +142,14 @@ func WaitForTargetPrimaryElection(client *Client, ctx *MigrationContext) error {
 		// Check if the new primary is one of our target hosts
 		for _, targetHost := range ctx.TargetHosts {
 			if strings.Contains(newPrimary, strings.Split(targetHost, ".")[0]) {
-				logger.Info(fmt.Sprintf("New primary elected successfully from target cluster: %s", newPrimary))
+				logger.Info(fmt.Sprintf("New primary elected successfully from target Cluster: %s", newPrimary))
 				return nil
 			}
 		}
 
-		logger.Debug(fmt.Sprintf("Current primary %s is not from target cluster, waiting...", newPrimary))
+		logger.Debug(fmt.Sprintf("Current primary %s is not from target Cluster, waiting...", newPrimary))
 		time.Sleep(interval)
 	}
 
-	return fmt.Errorf("new primary was not elected from target cluster within %v", timeout)
+	return fmt.Errorf("new primary was not elected from target Cluster within %v", timeout)
 }
