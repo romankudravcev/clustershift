@@ -33,7 +33,7 @@ func EnableRequestForwarding(c kube.Clusters, opts prompt.MigrationOptions, reso
 		err := c.Origin.CreateResourcesFromURL(constants.HttpProxyIngressURL, "clustershift")
 		exit.OnErrorWithMessage(err, "Failed to create resources from URL")
 	} else {
-		Redirect(c, resources)
+		Redirect(c, resources, opts)
 	}
 }
 
