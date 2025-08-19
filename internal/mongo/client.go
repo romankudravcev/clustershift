@@ -23,19 +23,19 @@ const (
 
 // Client manages a MongoDB client pod for executing commands
 type Client struct {
-	cluster   kube.Cluster
-	namespace string
-	podName   string
-	isReady   bool
+	Cluster   kube.Cluster
+	Namespace string
+	PodName   string
+	IsReady   bool
 }
 
 // NewMongoClient creates a new MongoDB client instance
 func NewMongoClient(cluster kube.Cluster, namespace string) *Client {
 	mongoClient := &Client{
-		cluster:   cluster,
-		namespace: namespace,
-		podName:   mongoClientPodName,
-		isReady:   false,
+		Cluster:   cluster,
+		Namespace: namespace,
+		PodName:   mongoClientPodName,
+		IsReady:   false,
 	}
 
 	err := mongoClient.CreateClientPod()
@@ -51,8 +51,8 @@ func (mc *Client) CreateClientPod() error {
 
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      mc.podName,
-			Namespace: mc.namespace,
+			Name:      mc.PodName,
+			Namespace: mc.Namespace,
 			Labels: map[string]string{
 				"app":  "mongosh-client",
 				"role": "database-client",
@@ -80,47 +80,47 @@ func (mc *Client) CreateClientPod() error {
 		},
 	}
 
-	err := mc.cluster.CreateResource(kube.Pod, mc.namespace, pod)
+	err := mc.Cluster.CreateResource(kube.Pod, mc.Namespace, pod)
 	if err != nil {
 		return fmt.Errorf("failed to create MongoDB client pod: %w", err)
 	}
 
 	logger.Debug("Waiting for MongoDB client pod to be ready...")
-	err = kube.WaitForPodReadyByName(mc.cluster, mc.podName, mc.namespace, 5*time.Minute)
+	err = kube.WaitForPodReadyByName(mc.Cluster, mc.PodName, mc.Namespace, 5*time.Minute)
 	if err != nil {
 		return fmt.Errorf("MongoDB client pod failed to become ready: %w", err)
 	}
 
-	mc.isReady = true
+	mc.IsReady = true
 	return nil
 }
 
 // DeleteClientPod deletes the MongoDB client pod
 func (mc *Client) DeleteClientPod() error {
-	if !mc.isReady {
+	if !mc.IsReady {
 		return nil
 	}
 
 	logger.Debug("Deleting MongoDB client pod...")
 
-	err := mc.cluster.DeleteResource(kube.Pod, mc.podName, mc.namespace)
+	err := mc.Cluster.DeleteResource(kube.Pod, mc.PodName, mc.Namespace)
 	if err != nil {
 		return fmt.Errorf("failed to delete MongoDB client pod: %w", err)
 	}
 
-	mc.isReady = false
+	mc.IsReady = false
 	return nil
 }
 
 // execMongoCommand executes a MongoDB command using the client pod
 func (mc *Client) ExecMongoCommand(command []string) (string, error) {
-	if !mc.isReady {
+	if !mc.IsReady {
 		return "", fmt.Errorf("MongoDB client pod is not ready")
 	}
 
 	var out, errOut bytes.Buffer
 
-	err := mc.cluster.ExecIntoPod(mc.namespace, mc.podName, "", command, &out, &errOut)
+	err := mc.Cluster.ExecIntoPod(mc.Namespace, mc.PodName, "", command, &out, &errOut)
 	if err != nil {
 		return "", fmt.Errorf("failed to execute MongoDB command: %w, stderr: %s", err, errOut.String())
 	}
