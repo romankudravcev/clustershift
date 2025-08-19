@@ -40,7 +40,7 @@ const (
 	LinkerdRepoURL                   = "https://helm.linkerd.io/stable"
 	LinkerdCrdsChartName             = "linkerd-edge/linkerd-crds"
 	LinkerdControlPlaneChartName     = "linkerd-edge/linkerd-control-plane"
-	LinkerdMultiClusterChartName     = "linkerd/linkerd-multicluster"
+	LinkerdMultiClusterChartName     = "linkerd-edge/linkerd-multicluster"
 	LinkerdMultiClusterLinkChartName = "linkerd/charts"
 	LinkerdNamespace                 = "linkerd"
 	LinkerdMultiClusterNamespace     = "linkerd-multicluster"
