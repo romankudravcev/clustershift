@@ -35,7 +35,7 @@ func exportAllServices(c kube.Clusters, migrationResource migration.Resources) e
 
 	for _, service := range serviceList.Items {
 		if migrationResource.GetNetworkingTool() == prompt.NetworkingToolLinkerd {
-			err := linkerd.MirrorService(c.Target, service.Namespace, service.Name)
+			err := linkerd.MirrorService(c.Target, service.Name, service.Namespace)
 			exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to mirror service %s in namespace %s", service.Name, service.Namespace))
 		} else {
 			migrationResource.ExportService(c.Target, service.Namespace, service.Name)
