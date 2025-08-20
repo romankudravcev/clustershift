@@ -15,9 +15,9 @@ import (
 )
 
 func Redirect(c kube.Clusters, migrationResource migration.Resources, opts prompt.MigrationOptions) {
-	//err := exportAllServices(c, migrationResource)
-	//exit.OnErrorWithMessage(err, "Failed to export all services")
-	err := updateIngressRoutes(c.Origin, migrationResource, opts)
+	err := exportAllServices(c, migrationResource)
+	exit.OnErrorWithMessage(err, "Failed to export all services")
+	err = updateIngressRoutes(c.Origin, migrationResource, opts)
 	exit.OnErrorWithMessage(err, "Failed to update ingress routes")
 }
 
@@ -34,7 +34,12 @@ func exportAllServices(c kube.Clusters, migrationResource migration.Resources) e
 	}
 
 	for _, service := range serviceList.Items {
-		migrationResource.ExportService(c.Target, service.Namespace, service.Name)
+		if migrationResource.GetNetworkingTool() == prompt.NetworkingToolLinkerd {
+			err := linkerd.MirrorService(c.Target, service.Namespace, service.Name)
+			exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to mirror service %s in namespace %s", service.Name, service.Namespace))
+		} else {
+			migrationResource.ExportService(c.Target, service.Namespace, service.Name)
+		}
 
 		if migrationResource.GetNetworkingTool() == prompt.NetworkingToolSubmariner {
 			err = createRemoteService(c.Origin, migrationResource, service)
