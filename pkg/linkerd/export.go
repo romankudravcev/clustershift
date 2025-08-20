@@ -46,6 +46,21 @@ func ExportService(cluster kube.Cluster, name, namespace string) {
 	exit.OnErrorWithMessage(err, "Failed to export service")
 }
 
+func MirrorService(cluster kube.Cluster, name, namespace string) error {
+	logger.Info(fmt.Sprintf("Mirroring service %s in namespace %s", name, namespace))
+
+	mirrorLabel := map[string]string{
+		"mirror.linkerd.io/exported": "true",
+	}
+
+	err := cluster.AddLabel(kube.Service, name, namespace, mirrorLabel)
+	if err != nil {
+		return fmt.Errorf("failed to mirror service: %v", err)
+	}
+
+	return nil
+}
+
 func InjectNamespace(cluster kube.Cluster, namespace string) error {
 	logger.Info(fmt.Sprintf("Injecting namespace %s with linkerd", namespace))
 
