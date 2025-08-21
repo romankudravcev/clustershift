@@ -73,10 +73,6 @@ func handleLinkerdRerouting() {
 func handleSkupperRerouting() {
 	logger.Info("Entering Skupper rerouting section")
 
-	// Initialize Skupper CLI at the beginning
-	//err := skupper.InitializeSkupperCLI()
-	//exit.OnErrorWithMessage(err, "Failed to initialize Skupper CLI")
-
 	namespaces, err := clusters.Origin.FetchResources(kube.Namespace)
 	exit.OnErrorWithMessage(err, "Failed to fetch namespaces from origin cluster")
 	namespaceList, ok := namespaces.(*v1.NamespaceList)
