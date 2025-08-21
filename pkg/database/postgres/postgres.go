@@ -68,17 +68,6 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 		err = copyResources(c, db, resources)
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to copy resources for %s", db.StatefulsetName))
 
-		/*
-				if resources.GetNetworkingTool() == prompt.NetworkingToolSkupper {
-					// Rename target service temporarily to avoid conflicts during exposure
-					err := renameTargetService(c.Target, db.ServiceName, db.Namespace, true)
-					exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to rename target service %s temporarily", db.ServiceName))
-
-					err = skupper.ExposeStatefulset(db.StatefulsetName, db.Namespace, c.Origin.ClusterOptions.KubeconfigPath)
-					exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to expose StatefulSet %s with Skupper", db.StatefulsetName))
-			}
-		*/
-
 		// Wait for replication to be ready (wait up to 10 minutes)
 		err = waitForReplicationReady(c, db, 10*time.Minute)
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to wait for replication readiness for %s", db.StatefulsetName))
@@ -86,15 +75,6 @@ func Migrate(c kube.Clusters, resources migration.Resources) {
 		// Decouple target database from source to make it independent
 		err = decoupleTargetFromSource(c, db)
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to decouple target database %s from source", db.StatefulsetName))
-
-		// Restore target service name after exposure is complete
-		if resources.GetNetworkingTool() == prompt.NetworkingToolSkupper {
-			err := UnexposePostgresStatefulSet(c, db, resources)
-			exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to unexpose PostgreSQL StatefulSet %s", db.StatefulsetName))
-			time.Sleep(5 * time.Second)
-			err = renameTargetService(c.Target, db.ServiceName+"-temp", db.Namespace, false)
-			exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to restore target service %s name", db.ServiceName))
-		}
 
 		logger.Info(fmt.Sprintf("Successfully migrated PostgreSQL database %s", db.StatefulsetName))
 	}
@@ -494,32 +474,6 @@ func decoupleTargetFromSource(c kube.Clusters, db DatabaseInstance) error {
 		logger.Info("Target database is already in master mode")
 	}
 
-	/*
-		// Clean up replication configuration
-		logger.Info("Cleaning up replication configuration")
-
-		cleanupCmds := [][]string{
-			// Remove replication user (optional, for security)
-			{"env", "PGPASSWORD=" + db.Password, "/opt/bitnami/postgresql/bin/psql", "-U", "postgres",
-				"-c", "DROP ROLE IF EXISTS repl_user;"},
-			// Remove replication-specific configuration from pg_hba.conf
-			{"bash", "-c", "sed -i '/host replication repl_user/d' /opt/bitnami/postgresql/conf/pg_hba.conf"},
-			// Reload configuration
-			{"env", "PGPASSWORD=" + db.Password, "/opt/bitnami/postgresql/bin/psql", "-U", "postgres",
-				"-c", "SELECT pg_reload_conf();"},
-		}
-
-		for i, cmd := range cleanupCmds {
-			out.Reset()
-			errOut.Reset()
-			err := c.Target.ExecIntoPod(db.Namespace, db.StatefulsetName+"-0", "", cmd, &out, &errOut)
-			if err != nil {
-				// Log warnings but don't fail the entire operation for cleanup issues
-				logger.Info(fmt.Sprintf("Warning: cleanup step %d failed: %v, stderr: %s", i+1, err, errOut.String()))
-			}
-		}
-	*/
-
 	logger.Info("Target database successfully decoupled and is now operating as an independent master")
 	return nil
 }
@@ -552,22 +506,6 @@ func renameTargetService(c kube.Cluster, originalName, namespace string, toTempo
 		if err != nil {
 			return fmt.Errorf("failed to delete original service %s after renaming: %w", originalName, err)
 		}
-	}
-
-	return nil
-}
-
-// UnexposePostgresStatefulSet unexposes a PostgreSQL StatefulSet and cleans up the exposure
-func UnexposePostgresStatefulSet(c kube.Clusters, db DatabaseInstance, resources migration.Resources) error {
-	logger.Info(fmt.Sprintf("Unexposing PostgreSQL StatefulSet %s", db.StatefulsetName))
-
-	if resources.GetNetworkingTool() == prompt.NetworkingToolSkupper {
-		// Unexpose the StatefulSet using Skupper
-		err := skupper.UnexposeStatefulset(db.StatefulsetName, db.Namespace, c.Origin.ClusterOptions.KubeconfigPath)
-		if err != nil {
-			return fmt.Errorf("failed to unexpose StatefulSet %s with Skupper: %w", db.StatefulsetName, err)
-		}
-		logger.Info(fmt.Sprintf("Successfully unexposed PostgreSQL StatefulSet %s", db.StatefulsetName))
 	}
 
 	return nil
