@@ -9,6 +9,7 @@ import (
 	"clustershift/internal/mongo"
 	"clustershift/internal/prompt"
 	"clustershift/pkg/database/postgres"
+	"clustershift/pkg/linkerd"
 	"clustershift/pkg/skupper"
 	"context"
 	"fmt"
@@ -100,7 +101,7 @@ func prepareMigrationContext(statefulSet appsv1.StatefulSet, c kube.Clusters, re
 // migrateStatefulSet performs the complete migration of a MongoDB StatefulSet
 func migrateStatefulSet(ctx *mongo.MigrationContext, c kube.Clusters, resources migration.Resources, mongoClientOrigin, mongoClientTarget *mongo.Client) error {
 
-	if resources.GetNetworkingTool() == prompt.NetworkingToolSkupper {
+	if resources.GetNetworkingTool() == prompt.NetworkingToolSkupper || resources.GetNetworkingTool() == prompt.NetworkingToolLinkerd {
 		originalMemberCount := ctx.StatefulSet.Spec.Replicas
 
 		targetDBPod := &mongo.Client{
@@ -132,8 +133,15 @@ func migrateStatefulSet(ctx *mongo.MigrationContext, c kube.Clusters, resources 
 		//wait till statefulset is ready
 		err := waitForStatefulSetReady(c.Target, statefulSet.Name, statefulSet.Namespace)
 		exit.OnErrorWithMessage(err, fmt.Sprintf("Failed to wait for StatefulSet %s to be ready in target cluster", statefulSet.Name))
-		skupper.CreateSiteConnection(c, statefulSet.Namespace)
+		if resources.GetNetworkingTool() == prompt.NetworkingToolSkupper {
+			skupper.CreateSiteConnection(c, statefulSet.Namespace)
+		}
 		resources.ExportService(c.Target, service.Namespace, service.Name)
+
+		if resources.GetNetworkingTool() == prompt.NetworkingToolLinkerd {
+			err := linkerd.InjectNamespace(c.Origin, "default")
+			exit.OnErrorWithMessage(err, "Failed to inject linkerd into origin namespace")
+		}
 		time.Sleep(5 * time.Second)
 
 		targetHost := fmt.Sprintf("%s-0.%s.%s.svc.cluster.local:27017", statefulSet.Name, service.Name, service.Namespace)
@@ -164,9 +172,7 @@ func migrateStatefulSet(ctx *mongo.MigrationContext, c kube.Clusters, resources 
 		originURI := getMongoURI(c.Origin, service, resources, mongoClientOrigin, originPrimaryHost)
 		targetURI := getMongoURI(c.Target, service, resources, mongoClientTarget, targetPrimaryHost) + "&directConnection=true"
 
-		if resources.GetNetworkingTool() == prompt.NetworkingToolSkupper || resources.GetNetworkingTool() == prompt.NetworkingToolLinkerd {
-			targetURI = fmt.Sprintf("mongodb://clusteradmin:password1@%s-target.%s.svc.cluster.local:27017/?authSource=admin&directConnection=true", service.Name, service.Namespace)
-		}
+		targetURI = fmt.Sprintf("mongodb://clusteradmin:password1@%s-target.%s.svc.cluster.local:27017/?authSource=admin&directConnection=true", service.Name, service.Namespace)
 
 		deployMongoSyncer(c.Origin, originURI, targetURI)
 
