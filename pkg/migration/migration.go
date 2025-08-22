@@ -40,7 +40,6 @@ func Migrate(kubeconfigOrigin string, kubeconfigTarget string, opts prompt.Migra
 
 	migrateDatabases(resources, opts)
 	migrateKubernetesResources()
-
 	cnpg.DemoteOriginCluster(clusters.Origin)
 	cnpg.DisableReplication(clusters.Target)
 	redirect.EnableRequestForwarding(clusters, opts, resources)
@@ -55,7 +54,8 @@ func handleLinkerdRerouting() {
 		exit.OnErrorWithMessage(fmt.Errorf("failed to convert to NamespaceList"), "Type assertion failed")
 	}
 
-	validNamespaces := filterValidNamespaces(namespaceList.Items)
+	targetNamespaces := []string{"postgres", "mongodb", "benchmark", "traefik"}
+	validNamespaces := filterSpecificNamespaces(namespaceList.Items, targetNamespaces)
 	logger.Info(fmt.Sprintf("Number of valid namespaces found: %d", len(validNamespaces)))
 
 	for _, namespace := range validNamespaces {
